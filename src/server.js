@@ -455,13 +455,14 @@ app.post('/photos/:id/delete', requireAuth, (req, res) => {
 });
 
 app.get('/browse', requireAuth, (req, res) => {
-  const profiles = profileQuery(req.user, req.query);
-  res.render('browse', { profiles, query: req.query, title: 'Suggested for you', subtitle: 'Profiles ranked by location, shared tags, and fame', mode: 'browse' });
+  const profiles = profileQuery(req.user, {});
+  res.render('browse', { profiles });
 });
 
 app.get('/search', requireAuth, (req, res) => {
-  const profiles = profileQuery(req.user, req.query);
-  res.render('browse', { profiles, query: req.query, title: 'Search profiles', subtitle: 'Filter by age, location, fame, or interest', mode: 'search' });
+  const hasQuery = Object.keys(req.query).some(k => req.query[k] !== '');
+  const profiles = hasQuery ? profileQuery(req.user, req.query) : null;
+  res.render('search', { profiles, query: req.query });
 });
 
 app.get('/users/:username', requireAuth, (req, res) => {

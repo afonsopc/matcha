@@ -2,36 +2,20 @@
 <section class="panel">
   <div class="panel-header">
     <div>
-      <h1 style="margin:0;"><%= title %></h1>
-      <p><%= subtitle %></p>
+      <h1 style="margin:0;">Suggested for you</h1>
+      <p>Profiles ranked by location, shared interests, and fame</p>
     </div>
-    <p class="hint"><%= profiles.length %> result<%= profiles.length === 1 ? '' : 's' %></p>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <p class="hint"><%= profiles.length %> profile<%= profiles.length === 1 ? '' : 's' %></p>
+      <a class="button ghost small" href="/search">Search &rarr;</a>
+    </div>
   </div>
-  <form method="get" class="filters">
-    <label>Min age <input name="minAge" type="number" min="18" max="120" placeholder="18" value="<%= query.minAge || '' %>"></label>
-    <label>Max age <input name="maxAge" type="number" min="18" max="120" placeholder="99" value="<%= query.maxAge || '' %>"></label>
-    <label>Min fame <input name="minFame" type="number" min="0" max="100" placeholder="0" value="<%= query.minFame || '' %>"></label>
-    <label>Max fame <input name="maxFame" type="number" min="0" max="100" placeholder="100" value="<%= query.maxFame || '' %>"></label>
-    <label>Location <input name="location" placeholder="City or neighborhood" value="<%= query.location || '' %>"></label>
-    <label>Tag <input name="tag" placeholder="e.g. coffee" value="<%= query.tag || '' %>"></label>
-    <label>Sort by
-      <select name="sort">
-        <% [['','Best match'],['age','Age'],['location','Location'],['fame','Fame'],['tags','Common tags']].forEach(([v,l]) => { %>
-          <option value="<%= v %>" <%= (query.sort || '') === v ? 'selected' : '' %>><%= l %></option>
-        <% }) %>
-      </select>
-    </label>
-    <div class="row-actions">
-      <a class="button ghost small" href="<%= mode === 'search' ? '/search' : '/browse' %>">Clear filters</a>
-      <button class="primary" type="submit">Apply</button>
-    </div>
-  </form>
 </section>
 
 <% if (!profiles.length) { %>
   <section class="empty" style="margin-top:18px;">
-    <strong>No profiles match those filters.</strong>
-    Try widening the age range, removing the tag, or clearing the location.
+    <strong>No suggestions yet.</strong>
+    Complete your profile and add interests to get matched with others.
   </section>
 <% } else { %>
   <section class="cards">
