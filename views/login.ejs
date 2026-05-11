@@ -1,11 +1,25 @@
 <%- include('partials/head') %>
 <section class="panel narrow">
-  <h1>Sign in</h1>
-  <form method="post" class="form">
-    <label>Username <input name="username" required></label>
-    <label>Password <input name="password" type="password" required></label>
-    <button class="primary">Login</button>
+  <div class="panel-header">
+    <div>
+      <h1>Welcome back</h1>
+      <p>Sign in to keep browsing and chatting.</p>
+    </div>
+  </div>
+  <form method="post" action="/login" class="form" autocomplete="on">
+    <label>Username
+      <input name="username" value="<%= values && values.username || '' %>" autocomplete="username" autofocus required>
+    </label>
+    <label>Password
+      <span class="pw-wrapper">
+        <input name="password" type="password" autocomplete="current-password" data-password="toggle" required>
+      </span>
+    </label>
+    <button class="primary" type="submit">Sign in</button>
   </form>
-  <p><a href="/forgot">Forgot password?</a></p>
+  <p style="display:flex;justify-content:space-between;gap:12px;color:var(--muted);margin-top:14px;">
+    <a href="/forgot">Forgot password?</a>
+    <a href="/register">Need an account?</a>
+  </p>
 </section>
 <%- include('partials/foot') %>

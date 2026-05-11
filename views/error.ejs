@@ -1,6 +1,11 @@
 <%- include('partials/head') %>
-<section class="panel narrow">
-  <h1>Unavailable</h1>
-  <p><%= message %></p>
+<section class="panel narrow" style="text-align:center;">
+  <p class="eyebrow">Something’s off</p>
+  <h1 style="margin-top:8px;"><%= message %></h1>
+  <p style="color:var(--muted);">It’s likely a broken link or a page that no longer exists.</p>
+  <div class="actions" style="justify-content:center;">
+    <a class="button primary" href="<%= user ? '/browse' : '/' %>">Take me home</a>
+    <% if (user) { %><a class="button" href="/profile">My profile</a><% } %>
+  </div>
 </section>
 <%- include('partials/foot') %>

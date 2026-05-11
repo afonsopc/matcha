@@ -1,11 +1,47 @@
 <%- include('partials/head') %>
 <section class="panel">
-  <h1>Notifications</h1>
-  <ul class="notifications">
-    <% notifications.forEach(n => { %>
-      <li><strong><%= n.type %></strong> <%= n.body %></li>
-    <% }) %>
-  </ul>
-  <% if (!notifications.length) { %><p>No notifications yet.</p><% } %>
+  <div class="panel-header">
+    <div>
+      <h1 style="margin:0;">Notifications</h1>
+      <p>Likes, matches, profile views and messages — newest first.</p>
+    </div>
+  </div>
+  <% if (!notifications.length) { %>
+    <div class="empty" style="margin-top:18px;">
+      <strong>Nothing yet</strong>
+      Once people interact with your profile, you’ll see it here.
+    </div>
+  <% } else { %>
+    <ul class="notifications">
+      <% const ICONS = { like: '♥', match: '✨', message: '✉', visit: '👁', unlike: '✕' }; %>
+      <% notifications.forEach(n => { %>
+        <li class="<%= n.read_at ? '' : 'unread' %>">
+          <div class="n-icon <%= n.type %>">
+            <% if (n.actor_photo) { %>
+              <img src="/static/uploads/<%= n.actor_photo %>" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">
+            <% } else { %>
+              <%= ICONS[n.type] || '🔔' %>
+            <% } %>
+          </div>
+          <div class="n-body">
+            <%= n.body %>
+            <small><%
+              const seconds = Math.floor(Date.now() / 1000) - Number(n.created_at);
+              if (seconds < 60) { %>just now<% }
+              else if (seconds < 3600) { %><%= Math.floor(seconds / 60) %> min ago<% }
+              else if (seconds < 86400) { %><%= Math.floor(seconds / 3600) %> h ago<% }
+              else { %><%= Math.floor(seconds / 86400) %> d ago<% } %></small>
+          </div>
+          <div>
+            <% if (n.link) { %>
+              <a class="n-link" href="<%= n.link %>">Open</a>
+            <% } else if (n.actor_username) { %>
+              <a class="n-link" href="/users/<%= n.actor_username %>">View</a>
+            <% } %>
+          </div>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
 </section>
 <%- include('partials/foot') %>

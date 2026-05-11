@@ -99,10 +99,14 @@ function migrate() {
       actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
       type TEXT NOT NULL,
       body TEXT NOT NULL,
+      link TEXT,
       read_at INTEGER,
       created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
     );
   `);
+
+  const hasLink = db.prepare("PRAGMA table_info(notifications)").all().some((c) => c.name === 'link');
+  if (!hasLink) db.exec('ALTER TABLE notifications ADD COLUMN link TEXT');
 }
 
 function all(sql, params = {}) {

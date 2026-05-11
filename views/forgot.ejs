@@ -1,9 +1,17 @@
 <%- include('partials/head') %>
 <section class="panel narrow">
-  <h1>Reset password</h1>
-  <form method="post" class="form">
-    <label>Email <input name="email" type="email" required></label>
-    <button class="primary">Send reset link</button>
+  <div class="panel-header">
+    <div>
+      <h1>Reset your password</h1>
+      <p>Tell us your email — we’ll send a one-time link.</p>
+    </div>
+  </div>
+  <form method="post" action="/forgot" class="form">
+    <label>Email
+      <input name="email" type="email" value="<%= values && values.email || '' %>" autocomplete="email" required>
+    </label>
+    <button class="primary" type="submit">Send reset link</button>
+    <p style="color:var(--muted);"><a href="/login">Back to sign in</a></p>
   </form>
 </section>
 <%- include('partials/foot') %>

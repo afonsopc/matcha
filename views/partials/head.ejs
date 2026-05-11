@@ -5,26 +5,40 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Matcha</title>
   <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23c64b3f'/><path d='M9 11 L16 22 L23 11' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
   <script src="/socket.io/socket.io.js" defer></script>
   <script src="/static/js/app.js" defer></script>
 </head>
-<body>
+<body<% if (user) { %> data-user-id="<%= user.id %>"<% } %>>
   <header class="topbar">
     <a class="brand" href="/">Matcha</a>
     <nav>
       <% if (user) { %>
-        <a href="/browse">Browse</a>
-        <a href="/search">Search</a>
-        <a href="/chat">Chat</a>
-        <a href="/notifications">Notifications <span id="badge"><%= unreadCount || 0 %></span></a>
-        <a href="/profile"><%= user.username %></a>
-        <form action="/logout" method="post"><button>Logout</button></form>
+        <a href="/browse" class="<%= currentPath === '/browse' ? 'active' : '' %>">Browse</a>
+        <a href="/search" class="<%= currentPath === '/search' ? 'active' : '' %>">Search</a>
+        <a href="/chat" class="<%= currentPath === '/chat' ? 'active' : '' %>">
+          Chat<% if (unreadMessages) { %> <span class="badge" data-badge="messages"><%= unreadMessages %></span><% } else { %> <span class="badge" data-badge="messages" hidden>0</span><% } %>
+        </a>
+        <a href="/notifications" class="<%= currentPath === '/notifications' ? 'active' : '' %>">
+          Alerts<% if (unreadCount) { %> <span class="badge" data-badge="notifications"><%= unreadCount %></span><% } else { %> <span class="badge" data-badge="notifications" hidden>0</span><% } %>
+        </a>
+        <a href="/profile" class="<%= currentPath === '/profile' ? 'active' : '' %>">@<%= user.username %></a>
+        <form action="/logout" method="post"><button class="ghost small" type="submit">Log out</button></form>
       <% } else { %>
-        <a href="/login">Login</a>
-        <a href="/register">Register</a>
+        <a href="/login" class="<%= currentPath === '/login' ? 'active' : '' %>">Sign in</a>
+        <a href="/register" class="<%= currentPath === '/register' ? 'active' : '' %>">Create account</a>
       <% } %>
     </nav>
   </header>
   <main class="shell">
-    <% if (typeof error !== 'undefined' && error) { %><p class="flash error"><%= error %></p><% } %>
-    <% if (typeof notice !== 'undefined' && notice) { %><p class="flash notice"><%= notice %></p><% } %>
+    <% if (typeof error !== 'undefined' && error) { %><p class="flash error" role="alert"><%= error %></p><% } %>
+    <% if (typeof notice !== 'undefined' && notice) { %>
+      <p class="flash notice" role="status">
+        <% const m = String(notice).match(/(https?:\/\/[^\s]+)/); %>
+        <% if (m) { %>
+          <%= notice.slice(0, m.index) %><a href="<%= m[0] %>"><%= m[0] %></a><%= notice.slice(m.index + m[0].length) %>
+        <% } else { %>
+          <%= notice %>
+        <% } %>
+      </p>
+    <% } %>

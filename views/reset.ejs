@@ -1,9 +1,18 @@
 <%- include('partials/head') %>
 <section class="panel narrow">
-  <h1>Choose new password</h1>
-  <form method="post" class="form">
-    <label>Password <input name="password" type="password" minlength="10" required></label>
-    <button class="primary">Update password</button>
+  <div class="panel-header">
+    <div>
+      <h1>Choose a new password</h1>
+      <p>Pick something you’d be embarrassed to leak.</p>
+    </div>
+  </div>
+  <form method="post" action="/reset/<%= token %>" class="form">
+    <label>New password
+      <span class="pw-wrapper">
+        <input name="password" type="password" autocomplete="new-password" required data-password="meter">
+      </span>
+    </label>
+    <button class="primary" type="submit">Update password</button>
   </form>
 </section>
 <%- include('partials/foot') %>

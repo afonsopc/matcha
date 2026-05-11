@@ -1,59 +1,130 @@
 <%- include('partials/head') %>
+<% if (welcome) { %>
+  <p class="flash warn">Welcome! Complete your profile (photo, gender, birthdate, bio) to start liking other users.</p>
+<% } %>
 <section class="grid two">
   <div class="panel">
-    <h1>Your profile</h1>
-    <form method="post" enctype="multipart/form-data" class="form">
-      <div class="row">
-        <label>First name <input name="first_name" value="<%= profile.first_name %>" required></label>
-        <label>Last name <input name="last_name" value="<%= profile.last_name %>" required></label>
+    <div class="panel-header">
+      <div>
+        <h1>Your profile</h1>
+        <p>Everything here is editable any time. Only your email and password stay private.</p>
       </div>
-      <label>Email <input name="email" type="email" value="<%= profile.email %>" required></label>
+    </div>
+    <form method="post" enctype="multipart/form-data" class="form" autocomplete="on">
       <div class="row">
-        <label>Gender
+        <label>First name <input name="first_name" value="<%= profile.first_name %>" autocomplete="given-name" required></label>
+        <label>Last name <input name="last_name" value="<%= profile.last_name %>" autocomplete="family-name" required></label>
+      </div>
+      <label>Email <input name="email" type="email" value="<%= profile.email %>" autocomplete="email" required></label>
+      <div class="row">
+        <label>I am
           <select name="gender">
-            <% ['man','woman','other'].forEach(g => { %><option value="<%= g %>" <%= profile.gender === g ? 'selected' : '' %>><%= g %></option><% }) %>
+            <option value="" <%= !profile.gender ? 'selected' : '' %>>Prefer not to say</option>
+            <% ['man','woman','other'].forEach(g => { %><option value="<%= g %>" <%= profile.gender === g ? 'selected' : '' %>><%= g.charAt(0).toUpperCase() + g.slice(1) %></option><% }) %>
           </select>
         </label>
         <label>Interested in
           <select name="preference">
-            <% ['men','women','bisexual'].forEach(p => { %><option value="<%= p %>" <%= profile.preference === p ? 'selected' : '' %>><%= p %></option><% }) %>
+            <% [['men','Men'],['women','Women'],['bisexual','Everyone']].forEach(([v,l]) => { %><option value="<%= v %>" <%= profile.preference === v ? 'selected' : '' %>><%= l %></option><% }) %>
           </select>
         </label>
       </div>
-      <label>Birthdate <input name="birthdate" type="date" value="<%= profile.birthdate || '' %>"></label>
-      <label>Bio <textarea name="bio" rows="5"><%= profile.bio || '' %></textarea></label>
+      <label>Birthdate
+        <span class="hint">Must be at least 18.</span>
+        <input name="birthdate" type="date" value="<%= profile.birthdate || '' %>" max="<%= new Date(Date.now() - 18*365*86400000).toISOString().slice(0,10) %>">
+      </label>
+      <label>Bio
+        <span class="hint">Tell people who you are. Up to 900 characters.</span>
+        <textarea name="bio" rows="5" maxlength="900" placeholder="Coffee, books, weekend hikes…"><%= profile.bio || '' %></textarea>
+      </label>
       <div class="row">
-        <label>City <input name="city" value="<%= profile.city || '' %>"></label>
-        <label>Neighborhood <input name="neighborhood" value="<%= profile.neighborhood || '' %>"></label>
+        <label>City <input name="city" value="<%= profile.city || '' %>" placeholder="Lisbon"></label>
+        <label>Neighborhood <input name="neighborhood" value="<%= profile.neighborhood || '' %>" placeholder="Alvalade"></label>
       </div>
       <div class="row">
-        <label>Latitude <input name="latitude" type="number" step="any" value="<%= profile.latitude || '' %>"></label>
-        <label>Longitude <input name="longitude" type="number" step="any" value="<%= profile.longitude || '' %>"></label>
+        <label>Latitude
+          <input name="latitude" type="number" step="any" value="<%= profile.latitude || '' %>" placeholder="38.7537">
+        </label>
+        <label>Longitude
+          <input name="longitude" type="number" step="any" value="<%= profile.longitude || '' %>" placeholder="-9.1433">
+        </label>
       </div>
-      <label class="check"><input name="location_consent" type="checkbox" <%= profile.location_consent ? 'checked' : '' %>> Use location for matching</label>
-      <label>Tags <input name="tags" value="<%= tags.map(t => t.name).join(', ') %>" placeholder="music, hiking, coffee"></label>
-      <label>Photos <input name="photos" type="file" accept="image/png,image/jpeg,image/webp" multiple></label>
-      <button class="primary">Save profile</button>
+      <div class="actions" style="gap:10px;">
+        <button type="button" class="small" data-geolocate>Use my current location</button>
+        <span class="hint" data-geo-status></span>
+      </div>
+      <label class="check"><input name="location_consent" type="checkbox" <%= profile.location_consent ? 'checked' : '' %>> Use my GPS coordinates for matching</label>
+      <label>Interests
+        <span class="hint">Type a tag and press Enter (max 15).</span>
+        <input name="tags" value="<%= tags.map(t => t.name).join(', ') %>" data-tags-input>
+      </label>
+      <label>Add photos
+        <span class="hint">JPEG, PNG or WebP. Up to 3 MB each. Total of 5 photos.</span>
+        <input name="photos" type="file" accept="image/png,image/jpeg,image/webp" multiple>
+      </label>
+      <button class="primary" type="submit">Save profile</button>
     </form>
   </div>
   <aside class="panel">
-    <h2>Photos</h2>
-    <div class="photos">
-      <% photos.forEach(photo => { %>
-        <article>
-          <img src="/static/uploads/<%= photo.filename %>" alt="">
-          <form method="post" action="/photos/<%= photo.id %>/profile"><button><%= photo.is_profile ? 'Profile photo' : 'Make profile' %></button></form>
-          <form method="post" action="/photos/<%= photo.id %>/delete"><button>Delete</button></form>
-        </article>
-      <% }) %>
+    <h2 style="margin-top:0;">Photos <span class="hint" style="font-weight:400;"><%= photos.length %>/5</span></h2>
+    <% if (!photos.length) { %>
+      <div class="empty">
+        <strong>No photos yet</strong>
+        Add at least one to be able to like other profiles.
+      </div>
+    <% } else { %>
+      <div class="photos">
+        <% photos.forEach(photo => { %>
+          <div class="photo-tile">
+            <img src="/static/uploads/<%= photo.filename %>" alt="" data-lightbox>
+            <% if (photo.is_profile) { %><span class="ribbon">Profile</span><% } %>
+            <div class="photo-actions">
+              <% if (!photo.is_profile) { %>
+                <form method="post" action="/photos/<%= photo.id %>/profile"><button type="submit" class="small">Set as profile</button></form>
+              <% } %>
+              <form method="post" action="/photos/<%= photo.id %>/delete" data-confirm="Delete this photo?"><button type="submit" class="small">Delete</button></form>
+            </div>
+          </div>
+        <% }) %>
+      </div>
+    <% } %>
+
+    <h2>At a glance</h2>
+    <div class="stats">
+      <div class="stat"><strong><%= age || '–' %></strong><span>Age</span></div>
+      <div class="stat"><strong><%= profile.fame %></strong><span>Fame</span></div>
+      <div class="stat"><strong><%= tags.length %></strong><span>Interests</span></div>
     </div>
-    <h2>Stats</h2>
-    <p>Age: <%= age || 'missing' %></p>
-    <p>Fame rating: <%= profile.fame %></p>
+
     <h2>Recent likes</h2>
-    <ul><% likes.forEach(l => { %><li><%= l.username %></li><% }) %></ul>
+    <% if (!likes.length) { %><p class="hint">Nobody yet. Make sure you have a profile photo.</p><% } else { %>
+      <ul class="people-mini">
+        <% likes.forEach(l => { %>
+          <li>
+            <% if (l.profile_photo) { %><img src="/static/uploads/<%= l.profile_photo %>" alt=""><% } else { %><div class="placeholder">👤</div><% } %>
+            <div>
+              <a href="/users/<%= l.username %>">@<%= l.username %></a>
+              <small><%= l.first_name %> <%= l.last_name %></small>
+            </div>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+
     <h2>Recent visits</h2>
-    <ul><% visits.forEach(v => { %><li><%= v.username %></li><% }) %></ul>
+    <% if (!visits.length) { %><p class="hint">No visits yet.</p><% } else { %>
+      <ul class="people-mini">
+        <% visits.forEach(v => { %>
+          <li>
+            <% if (v.profile_photo) { %><img src="/static/uploads/<%= v.profile_photo %>" alt=""><% } else { %><div class="placeholder">👤</div><% } %>
+            <div>
+              <a href="/users/<%= v.username %>">@<%= v.username %></a>
+              <small><%= v.first_name %> <%= v.last_name %></small>
+            </div>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
   </aside>
 </section>
 <%- include('partials/foot') %>

@@ -2,31 +2,77 @@
 <section class="grid two">
   <article class="panel">
     <div class="profile-head">
-      <% if (profile.profile_photo) { %><img src="/static/uploads/<%= profile.profile_photo %>" alt=""><% } %>
+      <% if (profile.profile_photo) { %>
+        <img class="avatar" src="/static/uploads/<%= profile.profile_photo %>" alt="" data-lightbox>
+      <% } else { %>
+        <div class="placeholder" style="border-radius:14px;width:160px;height:160px;display:grid;place-items:center;">No photo</div>
+      <% } %>
       <div>
-        <h1><%= profile.first_name %> <%= profile.last_name %>, <%= age || '?' %></h1>
-        <p>@<%= profile.username %> · fame <%= profile.fame %> · <%= profile.online ? 'online' : 'last seen ' + (profile.last_seen || 'unknown') %></p>
-        <p><%= profile.city || '' %><%= distance !== null ? ` · ${distance} km away` : '' %></p>
+        <h1><%= profile.first_name %> <%= profile.last_name %><%= age ? ', ' + age : '' %></h1>
+        <p>@<%= profile.username %> · <span class="fame-pill">★ <%= profile.fame %></span></p>
+        <p><span class="online-dot <%= profile.online ? 'live' : '' %>"></span><%= lastSeenText(profile) %></p>
+        <p><%= profile.city || 'Location not set' %><%= distance !== null ? ' · ' + formatDistance(distance) : '' %></p>
+        <% if (isConnected) { %>
+          <span class="match-pill">✨ Connected — you can chat</span>
+        <% } else if (likedMe) { %>
+          <span class="match-pill warn">♥ They liked you — like back to connect</span>
+        <% } else if (liked) { %>
+          <span class="match-pill warn">You liked them — waiting for a like back</span>
+        <% } %>
       </div>
     </div>
-    <p><%= profile.bio || 'No bio yet.' %></p>
-    <div class="tags"><% tags.forEach(t => { %><span>#<%= t.name %></span><% }) %></div>
+
+    <% if (typeof query !== 'undefined' && query && query.need_photo) { %>
+      <p class="flash warn">Add a profile photo on your <a href="/profile">profile page</a> before liking anyone.</p>
+    <% } %>
+    <% if (typeof query !== 'undefined' && query && query.reported) { %>
+      <p class="flash notice">Thanks — we’ve recorded your report.</p>
+    <% } %>
+
+    <h2>About</h2>
+    <p style="white-space:pre-wrap;"><%= profile.bio || 'No bio yet.' %></p>
+
+    <% if (tags.length) { %>
+      <h2>Interests</h2>
+      <div class="tags"><% tags.forEach(t => { %><span>#<%= t.name %></span><% }) %></div>
+    <% } %>
+
+    <h2>Actions</h2>
     <div class="actions">
       <% if (liked) { %>
-        <form method="post" action="/users/<%= profile.id %>/unlike"><button>Unlike</button></form>
+        <form method="post" action="/users/<%= profile.id %>/unlike" data-confirm="Remove your like? This will also disable chat if you were connected.">
+          <button type="submit">Remove like</button>
+        </form>
+      <% } else if (!youHavePhoto) { %>
+        <button type="button" disabled title="Add a profile photo first">♥ Like</button>
+        <span class="hint">Add a profile photo to like other users.</span>
       <% } else { %>
-        <form method="post" action="/users/<%= profile.id %>/like"><button class="primary">Like</button></form>
+        <form method="post" action="/users/<%= profile.id %>/like">
+          <button type="submit" class="primary">♥ Like</button>
+        </form>
       <% } %>
-      <% if (isConnected) { %><a class="button" href="/chat?with=<%= profile.id %>">Chat</a><% } %>
-      <form method="post" action="/users/<%= profile.id %>/block"><button>Block</button></form>
-      <form method="post" action="/users/<%= profile.id %>/report"><button>Report fake</button></form>
+      <% if (isConnected) { %>
+        <a class="button" href="/chat?with=<%= profile.id %>">💬 Open chat</a>
+      <% } %>
+      <form method="post" action="/users/<%= profile.id %>/report" data-confirm="Report this profile as fake?">
+        <button type="submit" class="ghost small">Report fake</button>
+      </form>
+      <form method="post" action="/users/<%= profile.id %>/block" data-confirm="Block this user? They’ll disappear from your searches.">
+        <button type="submit" class="danger small">Block</button>
+      </form>
     </div>
   </article>
   <aside class="panel">
-    <h2>Photos</h2>
-    <div class="photos">
-      <% photos.forEach(photo => { %><img src="/static/uploads/<%= photo.filename %>" alt=""><% }) %>
-    </div>
+    <h2 style="margin-top:0;">Photos</h2>
+    <% if (!photos.length) { %>
+      <p class="hint">No additional photos.</p>
+    <% } else { %>
+      <div class="photo-gallery">
+        <% photos.forEach(photo => { %>
+          <img src="/static/uploads/<%= photo.filename %>" alt="" data-lightbox>
+        <% }) %>
+      </div>
+    <% } %>
   </aside>
 </section>
 <%- include('partials/foot') %>

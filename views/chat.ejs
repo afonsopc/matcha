@@ -1,25 +1,57 @@
 <%- include('partials/head') %>
 <section class="chat-layout">
   <aside class="panel people">
-    <h1>Matches</h1>
-    <% people.forEach(p => { %><a class="<%= active && active.id === p.id ? 'active' : '' %>" href="/chat?with=<%= p.id %>">@<%= p.username %></a><% }) %>
-    <% if (!people.length) { %><p>No mutual likes yet.</p><% } %>
+    <h2>Matches</h2>
+    <% if (!people.length) { %>
+      <div class="empty">
+        <strong>No mutual likes yet</strong>
+        Once someone likes you back, they’ll show up here.
+      </div>
+    <% } %>
+    <% people.forEach(p => { %>
+      <a class="chat-row <%= active && active.id === p.id ? 'active' : '' %>" href="/chat?with=<%= p.id %>">
+        <% if (p.profile_photo) { %><img src="/static/uploads/<%= p.profile_photo %>" alt=""><% } else { %><div class="placeholder">👤</div><% } %>
+        <div style="min-width:0;">
+          <div class="chat-name"><%= p.first_name || p.username %></div>
+          <div class="chat-preview"><%= p.last_message || 'Say hi 👋' %></div>
+        </div>
+        <div class="chat-meta">
+          <% if (p.unread) { %><span class="badge"><%= p.unread %></span><% } %>
+        </div>
+      </a>
+    <% }) %>
   </aside>
   <section class="panel chat">
     <% if (active) { %>
-      <h1>Chat with <%= active.username %></h1>
-      <div id="messages">
-        <% messages.forEach(m => { %>
-          <p class="<%= m.sender_id === user.id ? 'mine' : 'theirs' %>"><%= m.body %></p>
-        <% }) %>
+      <div class="chat-head">
+        <% if (active.profile_photo) { %><img src="/static/uploads/<%= active.profile_photo %>" alt=""><% } else { %><div class="placeholder">👤</div><% } %>
+        <div>
+          <h1><%= active.first_name || active.username %> <%= active.last_name || '' %></h1>
+          <p><span class="online-dot <%= active.online ? 'live' : '' %>"></span><%= lastSeenText(active) %> · <a href="/users/<%= active.username %>">View profile</a></p>
+        </div>
+      </div>
+      <div id="messages" data-active-id="<%= active.id %>">
+        <% if (!messages.length) { %>
+          <p class="empty" style="margin:auto;">No messages yet. Say something nice.</p>
+        <% } else { %>
+          <% messages.forEach(m => { %>
+            <p class="bubble <%= m.sender_id === user.id ? 'mine' : 'theirs' %>" data-at="<%= m.created_at %>">
+              <%= m.body %>
+              <small></small>
+            </p>
+          <% }) %>
+        <% } %>
       </div>
       <form method="post" action="/chat/<%= active.id %>" class="send">
-        <input name="body" maxlength="1000" autocomplete="off" required>
-        <button class="primary">Send</button>
+        <input name="body" maxlength="1000" autocomplete="off" required placeholder="Write a message…">
+        <button class="primary" type="submit">Send</button>
       </form>
     <% } else { %>
-      <h1>Chat</h1>
-      <p>Select a match to start.</p>
+      <h1>Your conversations</h1>
+      <div class="empty" style="margin-top:14px;">
+        <strong>Select a match to start chatting</strong>
+        Chat only opens when both of you have liked each other.
+      </div>
     <% } %>
   </section>
 </section>

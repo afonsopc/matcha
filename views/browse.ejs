@@ -1,33 +1,63 @@
 <%- include('partials/head') %>
 <section class="panel">
-  <h1><%= title %></h1>
+  <div class="panel-header">
+    <div>
+      <h1 style="margin:0;"><%= title %></h1>
+      <p><%= subtitle %></p>
+    </div>
+    <p class="hint"><%= profiles.length %> result<%= profiles.length === 1 ? '' : 's' %></p>
+  </div>
   <form method="get" class="filters">
-    <input name="minAge" type="number" min="18" placeholder="Min age" value="<%= query.minAge || '' %>">
-    <input name="maxAge" type="number" min="18" placeholder="Max age" value="<%= query.maxAge || '' %>">
-    <input name="minFame" type="number" min="0" max="100" placeholder="Min fame" value="<%= query.minFame || '' %>">
-    <input name="maxFame" type="number" min="0" max="100" placeholder="Max fame" value="<%= query.maxFame || '' %>">
-    <input name="location" placeholder="Location" value="<%= query.location || '' %>">
-    <input name="tag" placeholder="Tag" value="<%= query.tag || '' %>">
-    <select name="sort">
-      <% [['','Recommended'],['age','Age'],['location','Location'],['fame','Fame'],['tags','Common tags']].forEach(([v,l]) => { %>
-        <option value="<%= v %>" <%= query.sort === v ? 'selected' : '' %>><%= l %></option>
-      <% }) %>
-    </select>
-    <button>Apply</button>
+    <label>Min age <input name="minAge" type="number" min="18" max="120" placeholder="18" value="<%= query.minAge || '' %>"></label>
+    <label>Max age <input name="maxAge" type="number" min="18" max="120" placeholder="99" value="<%= query.maxAge || '' %>"></label>
+    <label>Min fame <input name="minFame" type="number" min="0" max="100" placeholder="0" value="<%= query.minFame || '' %>"></label>
+    <label>Max fame <input name="maxFame" type="number" min="0" max="100" placeholder="100" value="<%= query.maxFame || '' %>"></label>
+    <label>Location <input name="location" placeholder="City or neighborhood" value="<%= query.location || '' %>"></label>
+    <label>Tag <input name="tag" placeholder="e.g. coffee" value="<%= query.tag || '' %>"></label>
+    <label>Sort by
+      <select name="sort">
+        <% [['','Best match'],['age','Age'],['location','Location'],['fame','Fame'],['tags','Common tags']].forEach(([v,l]) => { %>
+          <option value="<%= v %>" <%= (query.sort || '') === v ? 'selected' : '' %>><%= l %></option>
+        <% }) %>
+      </select>
+    </label>
+    <div class="row-actions">
+      <a class="button ghost small" href="<%= mode === 'search' ? '/search' : '/browse' %>">Clear filters</a>
+      <button class="primary" type="submit">Apply</button>
+    </div>
   </form>
 </section>
-<section class="cards">
-  <% profiles.forEach(p => { %>
-    <article class="card">
-      <a href="/users/<%= p.username %>">
-        <% if (p.profile_photo) { %><img src="/static/uploads/<%= p.profile_photo %>" alt=""><% } else { %><div class="placeholder"></div><% } %>
-        <h2><%= p.first_name %>, <%= p.age || '?' %></h2>
-        <p>@<%= p.username %> · fame <%= p.fame %></p>
-        <p><%= p.city || 'Unknown city' %><%= p.distance !== null ? ` · ${p.distance} km` : '' %></p>
-        <p><%= p.common_tags %> common tags</p>
-      </a>
-    </article>
-  <% }) %>
-  <% if (!profiles.length) { %><p class="empty">No profiles found.</p><% } %>
-</section>
+
+<% if (!profiles.length) { %>
+  <section class="empty" style="margin-top:18px;">
+    <strong>No profiles match those filters.</strong>
+    Try widening the age range, removing the tag, or clearing the location.
+  </section>
+<% } else { %>
+  <section class="cards">
+    <% profiles.forEach(p => { %>
+      <article class="card">
+        <a href="/users/<%= p.username %>">
+          <div class="media">
+            <% if (p.profile_photo) { %>
+              <img src="/static/uploads/<%= p.profile_photo %>" alt="">
+            <% } else { %>
+              <div class="placeholder">No photo</div>
+            <% } %>
+            <div class="card-overlay">
+              <h2><%= p.first_name %><%= p.age ? ', ' + p.age : '' %></h2>
+              <p><span class="online-dot <%= p.online ? 'live' : '' %>"></span><%= p.city || 'Unknown city' %><%= p.distance !== null ? ' · ' + formatDistance(p.distance) : '' %></p>
+            </div>
+          </div>
+          <div class="card-body">
+            <p>
+              <span class="fame-pill">★ <%= p.fame %></span>
+              <% if (p.common_tags) { %><span class="tag-mini"><%= p.common_tags %> shared tag<%= p.common_tags === 1 ? '' : 's' %></span><% } %>
+            </p>
+          </div>
+        </a>
+      </article>
+    <% }) %>
+  </section>
+<% } %>
 <%- include('partials/foot') %>

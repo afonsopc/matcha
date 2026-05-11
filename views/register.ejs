@@ -1,13 +1,35 @@
 <%- include('partials/head') %>
 <section class="panel narrow">
-  <h1>Create account</h1>
-  <form method="post" class="form">
-    <label>Email <input name="email" type="email" required></label>
-    <label>Username <input name="username" pattern="[A-Za-z0-9_]{3,32}" required></label>
-    <label>First name <input name="first_name" required></label>
-    <label>Last name <input name="last_name" required></label>
-    <label>Password <input name="password" type="password" minlength="10" required></label>
-    <button class="primary">Register</button>
+  <div class="panel-header">
+    <div>
+      <h1>Create your account</h1>
+      <p>Takes a minute. We’ll email you a verification link.</p>
+    </div>
+  </div>
+  <form method="post" action="/register" class="form" autocomplete="on" novalidate>
+    <div class="row">
+      <label>First name
+        <input name="first_name" value="<%= values.first_name || '' %>" autocomplete="given-name" required>
+      </label>
+      <label>Last name
+        <input name="last_name" value="<%= values.last_name || '' %>" autocomplete="family-name" required>
+      </label>
+    </div>
+    <label>Email
+      <input name="email" type="email" value="<%= values.email || '' %>" autocomplete="email" placeholder="you@example.com" required>
+    </label>
+    <label>Username
+      <span class="hint">3–32 characters. Letters, digits, underscore.</span>
+      <input name="username" pattern="[A-Za-z0-9_]{3,32}" value="<%= values.username || '' %>" autocomplete="username" required>
+    </label>
+    <label>Password
+      <span class="hint">Mix cases, add a digit and a symbol. Avoid common words.</span>
+      <span class="pw-wrapper">
+        <input name="password" type="password" autocomplete="new-password" required data-password="meter" placeholder="Choose a strong password">
+      </span>
+    </label>
+    <button class="primary" type="submit">Create account</button>
+    <p>Already have one? <a href="/login">Sign in instead.</a></p>
   </form>
 </section>
 <%- include('partials/foot') %>
