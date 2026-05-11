@@ -1,0 +1,32 @@
+<%- include('partials/head') %>
+<section class="grid two">
+  <article class="panel">
+    <div class="profile-head">
+      <% if (profile.profile_photo) { %><img src="/static/uploads/<%= profile.profile_photo %>" alt=""><% } %>
+      <div>
+        <h1><%= profile.first_name %> <%= profile.last_name %>, <%= age || '?' %></h1>
+        <p>@<%= profile.username %> · fame <%= profile.fame %> · <%= profile.online ? 'online' : 'last seen ' + (profile.last_seen || 'unknown') %></p>
+        <p><%= profile.city || '' %><%= distance !== null ? ` · ${distance} km away` : '' %></p>
+      </div>
+    </div>
+    <p><%= profile.bio || 'No bio yet.' %></p>
+    <div class="tags"><% tags.forEach(t => { %><span>#<%= t.name %></span><% }) %></div>
+    <div class="actions">
+      <% if (liked) { %>
+        <form method="post" action="/users/<%= profile.id %>/unlike"><button>Unlike</button></form>
+      <% } else { %>
+        <form method="post" action="/users/<%= profile.id %>/like"><button class="primary">Like</button></form>
+      <% } %>
+      <% if (isConnected) { %><a class="button" href="/chat?with=<%= profile.id %>">Chat</a><% } %>
+      <form method="post" action="/users/<%= profile.id %>/block"><button>Block</button></form>
+      <form method="post" action="/users/<%= profile.id %>/report"><button>Report fake</button></form>
+    </div>
+  </article>
+  <aside class="panel">
+    <h2>Photos</h2>
+    <div class="photos">
+      <% photos.forEach(photo => { %><img src="/static/uploads/<%= photo.filename %>" alt=""><% }) %>
+    </div>
+  </aside>
+</section>
+<%- include('partials/foot') %>

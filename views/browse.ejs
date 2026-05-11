@@ -1,0 +1,33 @@
+<%- include('partials/head') %>
+<section class="panel">
+  <h1><%= title %></h1>
+  <form method="get" class="filters">
+    <input name="minAge" type="number" min="18" placeholder="Min age" value="<%= query.minAge || '' %>">
+    <input name="maxAge" type="number" min="18" placeholder="Max age" value="<%= query.maxAge || '' %>">
+    <input name="minFame" type="number" min="0" max="100" placeholder="Min fame" value="<%= query.minFame || '' %>">
+    <input name="maxFame" type="number" min="0" max="100" placeholder="Max fame" value="<%= query.maxFame || '' %>">
+    <input name="location" placeholder="Location" value="<%= query.location || '' %>">
+    <input name="tag" placeholder="Tag" value="<%= query.tag || '' %>">
+    <select name="sort">
+      <% [['','Recommended'],['age','Age'],['location','Location'],['fame','Fame'],['tags','Common tags']].forEach(([v,l]) => { %>
+        <option value="<%= v %>" <%= query.sort === v ? 'selected' : '' %>><%= l %></option>
+      <% }) %>
+    </select>
+    <button>Apply</button>
+  </form>
+</section>
+<section class="cards">
+  <% profiles.forEach(p => { %>
+    <article class="card">
+      <a href="/users/<%= p.username %>">
+        <% if (p.profile_photo) { %><img src="/static/uploads/<%= p.profile_photo %>" alt=""><% } else { %><div class="placeholder"></div><% } %>
+        <h2><%= p.first_name %>, <%= p.age || '?' %></h2>
+        <p>@<%= p.username %> · fame <%= p.fame %></p>
+        <p><%= p.city || 'Unknown city' %><%= p.distance !== null ? ` · ${p.distance} km` : '' %></p>
+        <p><%= p.common_tags %> common tags</p>
+      </a>
+    </article>
+  <% }) %>
+  <% if (!profiles.length) { %><p class="empty">No profiles found.</p><% } %>
+</section>
+<%- include('partials/foot') %>

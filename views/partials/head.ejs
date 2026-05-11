@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Matcha</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  <script src="/socket.io/socket.io.js" defer></script>
+  <script src="/static/js/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">Matcha</a>
+    <nav>
+      <% if (user) { %>
+        <a href="/browse">Browse</a>
+        <a href="/search">Search</a>
+        <a href="/chat">Chat</a>
+        <a href="/notifications">Notifications <span id="badge"><%= unreadCount || 0 %></span></a>
+        <a href="/profile"><%= user.username %></a>
+        <form action="/logout" method="post"><button>Logout</button></form>
+      <% } else { %>
+        <a href="/login">Login</a>
+        <a href="/register">Register</a>
+      <% } %>
+    </nav>
+  </header>
+  <main class="shell">
+    <% if (typeof error !== 'undefined' && error) { %><p class="flash error"><%= error %></p><% } %>
+    <% if (typeof notice !== 'undefined' && notice) { %><p class="flash notice"><%= notice %></p><% } %>

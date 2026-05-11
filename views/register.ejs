@@ -1,0 +1,13 @@
+<%- include('partials/head') %>
+<section class="panel narrow">
+  <h1>Create account</h1>
+  <form method="post" class="form">
+    <label>Email <input name="email" type="email" required></label>
+    <label>Username <input name="username" pattern="[A-Za-z0-9_]{3,32}" required></label>
+    <label>First name <input name="first_name" required></label>
+    <label>Last name <input name="last_name" required></label>
+    <label>Password <input name="password" type="password" minlength="10" required></label>
+    <button class="primary">Register</button>
+  </form>
+</section>
+<%- include('partials/foot') %>

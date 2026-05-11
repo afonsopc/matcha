@@ -1,0 +1,11 @@
+<%- include('partials/head') %>
+<section class="panel">
+  <h1>Notifications</h1>
+  <ul class="notifications">
+    <% notifications.forEach(n => { %>
+      <li><strong><%= n.type %></strong> <%= n.body %></li>
+    <% }) %>
+  </ul>
+  <% if (!notifications.length) { %><p>No notifications yet.</p><% } %>
+</section>
+<%- include('partials/foot') %>

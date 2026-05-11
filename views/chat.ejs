@@ -1,0 +1,26 @@
+<%- include('partials/head') %>
+<section class="chat-layout">
+  <aside class="panel people">
+    <h1>Matches</h1>
+    <% people.forEach(p => { %><a class="<%= active && active.id === p.id ? 'active' : '' %>" href="/chat?with=<%= p.id %>">@<%= p.username %></a><% }) %>
+    <% if (!people.length) { %><p>No mutual likes yet.</p><% } %>
+  </aside>
+  <section class="panel chat">
+    <% if (active) { %>
+      <h1>Chat with <%= active.username %></h1>
+      <div id="messages">
+        <% messages.forEach(m => { %>
+          <p class="<%= m.sender_id === user.id ? 'mine' : 'theirs' %>"><%= m.body %></p>
+        <% }) %>
+      </div>
+      <form method="post" action="/chat/<%= active.id %>" class="send">
+        <input name="body" maxlength="1000" autocomplete="off" required>
+        <button class="primary">Send</button>
+      </form>
+    <% } else { %>
+      <h1>Chat</h1>
+      <p>Select a match to start.</p>
+    <% } %>
+  </section>
+</section>
+<%- include('partials/foot') %>

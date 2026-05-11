@@ -1,0 +1,26 @@
+{
+  "name": "matcha",
+  "version": "1.0.0",
+  "description": "42 Matcha dating web application",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "seed": "node src/seed.js",
+    "check": "node --check src/server.js && node --check src/db.js && node --check src/seed.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.10.0",
+    "dotenv": "^16.5.0",
+    "ejs": "^3.1.10",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "express-session": "^1.18.1",
+    "helmet": "^8.1.0",
+    "multer": "^2.0.0",
+    "socket.io": "^4.8.1",
+    "validator": "^13.15.0"
+  },
+  "devDependencies": {}
+}

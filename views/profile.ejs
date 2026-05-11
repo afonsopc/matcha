@@ -1,0 +1,59 @@
+<%- include('partials/head') %>
+<section class="grid two">
+  <div class="panel">
+    <h1>Your profile</h1>
+    <form method="post" enctype="multipart/form-data" class="form">
+      <div class="row">
+        <label>First name <input name="first_name" value="<%= profile.first_name %>" required></label>
+        <label>Last name <input name="last_name" value="<%= profile.last_name %>" required></label>
+      </div>
+      <label>Email <input name="email" type="email" value="<%= profile.email %>" required></label>
+      <div class="row">
+        <label>Gender
+          <select name="gender">
+            <% ['man','woman','other'].forEach(g => { %><option value="<%= g %>" <%= profile.gender === g ? 'selected' : '' %>><%= g %></option><% }) %>
+          </select>
+        </label>
+        <label>Interested in
+          <select name="preference">
+            <% ['men','women','bisexual'].forEach(p => { %><option value="<%= p %>" <%= profile.preference === p ? 'selected' : '' %>><%= p %></option><% }) %>
+          </select>
+        </label>
+      </div>
+      <label>Birthdate <input name="birthdate" type="date" value="<%= profile.birthdate || '' %>"></label>
+      <label>Bio <textarea name="bio" rows="5"><%= profile.bio || '' %></textarea></label>
+      <div class="row">
+        <label>City <input name="city" value="<%= profile.city || '' %>"></label>
+        <label>Neighborhood <input name="neighborhood" value="<%= profile.neighborhood || '' %>"></label>
+      </div>
+      <div class="row">
+        <label>Latitude <input name="latitude" type="number" step="any" value="<%= profile.latitude || '' %>"></label>
+        <label>Longitude <input name="longitude" type="number" step="any" value="<%= profile.longitude || '' %>"></label>
+      </div>
+      <label class="check"><input name="location_consent" type="checkbox" <%= profile.location_consent ? 'checked' : '' %>> Use location for matching</label>
+      <label>Tags <input name="tags" value="<%= tags.map(t => t.name).join(', ') %>" placeholder="music, hiking, coffee"></label>
+      <label>Photos <input name="photos" type="file" accept="image/png,image/jpeg,image/webp" multiple></label>
+      <button class="primary">Save profile</button>
+    </form>
+  </div>
+  <aside class="panel">
+    <h2>Photos</h2>
+    <div class="photos">
+      <% photos.forEach(photo => { %>
+        <article>
+          <img src="/static/uploads/<%= photo.filename %>" alt="">
+          <form method="post" action="/photos/<%= photo.id %>/profile"><button><%= photo.is_profile ? 'Profile photo' : 'Make profile' %></button></form>
+          <form method="post" action="/photos/<%= photo.id %>/delete"><button>Delete</button></form>
+        </article>
+      <% }) %>
+    </div>
+    <h2>Stats</h2>
+    <p>Age: <%= age || 'missing' %></p>
+    <p>Fame rating: <%= profile.fame %></p>
+    <h2>Recent likes</h2>
+    <ul><% likes.forEach(l => { %><li><%= l.username %></li><% }) %></ul>
+    <h2>Recent visits</h2>
+    <ul><% visits.forEach(v => { %><li><%= v.username %></li><% }) %></ul>
+  </aside>
+</section>
+<%- include('partials/foot') %>
