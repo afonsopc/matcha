@@ -120,6 +120,7 @@
     wrap.className = 'tags-input';
     const visible = document.createElement('input');
     visible.type = 'text';
+    visible.id = 'tag-input';
     visible.placeholder = 'Add a tag and press Enter';
     visible.setAttribute('aria-label', 'Add interest');
     hidden.type = 'hidden';

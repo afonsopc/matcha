@@ -56,13 +56,30 @@ app.use(sessionMiddleware);
 io.engine.use(sessionMiddleware);
 
 const socketsByUser = new Map();
-const weakPasswords = new Set([
-  'password', 'password1', 'password123', 'password1234', 'passw0rd', 'qwerty', 'qwerty123',
-  'azerty', 'azerty123', 'letmein', 'admin', 'admin123', 'welcome', 'welcome1', 'bonjour',
-  'dragon', 'football', 'iloveyou', 'matcha', 'matcha123', 'monkey', 'sunshine', 'princess',
-  'superman', '123456789', '12345678', 'abc12345', 'abcdef12', 'qazwsx123', 'master',
-  'hello1234', 'changeme', 'trustno1', 'whatever1'
+const weakPasswordWords = new Set([
+  'password', 'passw', 'qwerty', 'azerty', 'letmein', 'admin', 'welcome', 'bonjour',
+  'dragon', 'football', 'iloveyou', 'matcha', 'monkey', 'sunshine', 'princess',
+  'superman', 'master', 'hello', 'changeme', 'trustno', 'whatever', 'baseball',
+  'shadow', 'michael', 'jessica', 'charlie', 'donald', 'thomas', 'jordan',
+  'harley', 'ranger', 'daniel', 'andrew', 'george', 'batman', 'hunter',
+  'buster', 'soccer', 'hockey', 'killer', 'pepper', 'joshua', 'maggie',
+  'zxcvbn', 'letmein', 'monkey', 'dragon', 'master', 'login', 'apple',
+  'strawberry', 'summer', 'winter', 'spring', 'autumn', 'flower', 'cookie',
+  'butter', 'coffee', 'cheese', 'orange', 'purple', 'yellow', 'matrix',
+  'starwars', 'star', 'force', 'ninja', 'pirate', 'wizard', 'secret',
+  'access', 'mustang', 'ferrari', 'porsche', 'mercedes', 'bmw', 'audi',
 ]);
+
+// Strip all non-alpha characters and check if the resulting base word is common.
+// This catches variants like Apple12345!, P@ssw0rd, Sunshine99!, strawberry5# etc.
+function isWeakPassword(password) {
+  const base = password.toLowerCase().replace(/[^a-z]/g, '');
+  if (weakPasswordWords.has(base)) return true;
+  for (const word of weakPasswordWords) {
+    if (base === word || base.startsWith(word) || base.endsWith(word)) return true;
+  }
+  return false;
+}
 
 function ageFromBirthdate(birthdate) {
   if (!birthdate) return null;
@@ -92,7 +109,7 @@ function passwordIssues(password) {
   if (!/[A-Z]/.test(pw)) issues.push('an uppercase letter');
   if (!/\d/.test(pw)) issues.push('a digit');
   if (!/[^A-Za-z0-9]/.test(pw)) issues.push('a symbol');
-  if (weakPasswords.has(pw.toLowerCase())) issues.push('something less common');
+  if (isWeakPassword(pw)) issues.push('something less common');
   return issues;
 }
 
@@ -495,6 +512,7 @@ app.get('/users/:username', requireAuth, (req, res) => {
 app.post('/users/:id/like', requireAuth, (req, res) => {
   const target = get('SELECT * FROM users WHERE id = ?', [req.params.id]);
   if (!target) return res.redirect('/browse');
+  if (target.id === req.user.id) return res.redirect('/browse');
   if (!hasProfilePhoto(req.user.id)) {
     return res.redirect(`/users/${target.username}?need_photo=1`);
   }
