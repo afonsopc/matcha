@@ -472,8 +472,8 @@ app.post('/photos/:id/delete', requireAuth, (req, res) => {
 });
 
 app.get('/browse', requireAuth, (req, res) => {
-  const profiles = profileQuery(req.user, {});
-  res.render('browse', { profiles });
+  const profiles = profileQuery(req.user, req.query);
+  res.render('browse', { profiles, query: req.query });
 });
 
 app.get('/search', requireAuth, (req, res) => {
