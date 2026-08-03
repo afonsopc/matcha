@@ -259,16 +259,16 @@
         return;
       }
       btn.disabled = true;
-      if (status) status.textContent = 'Locating…';
+      if (status) status.textContent = 'Locating';
       navigator.geolocation.getCurrentPosition((pos) => {
         if (latInput) latInput.value = pos.coords.latitude.toFixed(5);
         if (lngInput) lngInput.value = pos.coords.longitude.toFixed(5);
         if (consent && !consent.checked) consent.checked = true;
-        if (status) status.textContent = 'Location captured. Save the profile to keep it.';
+        if (status) status.textContent = 'Coordinates filled in. Save the profile to store them.';
         btn.disabled = false;
       }, (err) => {
         btn.disabled = false;
-        if (status) status.textContent = `Could not detect location (${err.message}). Enter your city instead.`;
+        if (status) status.textContent = `Could not get your position (${err.message}). Enter your city instead.`;
       }, { enableHighAccuracy: false, timeout: 8000 });
     });
   }
@@ -372,16 +372,13 @@
     }
     return host;
   }
-  const ICONS = { like: '♥', match: '✨', message: '✉', visit: '👁', unlike: '✕' };
-  const TITLES = { like: 'New like', match: 'It’s a match', message: 'New message', visit: 'Profile view', unlike: 'Disconnected' };
+  const TITLES = { like: 'New like', match: 'New connection', message: 'New message', visit: 'Profile visit', unlike: 'Disconnected' };
   function showToast(notification) {
     const host = getToastHost();
     const toast = document.createElement('div');
     toast.className = 'toast ' + (notification.type || '');
-    const icon = ICONS[notification.type] || '🔔';
     const title = TITLES[notification.type] || 'Notification';
     toast.innerHTML = `
-      <div class="t-icon">${escapeHtml(icon)}</div>
       <div>
         <strong>${escapeHtml(title)}</strong>
         <small>${escapeHtml(notification.body || '')}</small>

@@ -3,24 +3,24 @@
   <div class="panel-header">
     <div>
       <h1 style="margin:0;">Notifications</h1>
-      <p>Likes, matches, profile views and messages — newest first.</p>
+      <p>Newest first</p>
     </div>
   </div>
   <% if (!notifications.length) { %>
     <div class="empty" style="margin-top:18px;">
-      <strong>Nothing yet</strong>
-      Once people interact with your profile, you’ll see it here.
+      <strong>No notifications</strong>
+      Likes, visits and messages show up here.
     </div>
   <% } else { %>
     <ul class="notifications">
-      <% const ICONS = { like: '♥', match: '✨', message: '✉', visit: '👁', unlike: '✕' }; %>
+      <% const ICONS = { like: 'L', match: 'M', message: 'C', visit: 'V', unlike: 'U' }; %>
       <% notifications.forEach(n => { %>
         <li class="<%= n.read_at ? '' : 'unread' %>">
           <div class="n-icon <%= n.type %>">
             <% if (n.actor_photo) { %>
               <img src="/static/uploads/<%= n.actor_photo %>" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">
             <% } else { %>
-              <%= ICONS[n.type] || '🔔' %>
+              <%= ICONS[n.type] || '?' %>
             <% } %>
           </div>
           <div class="n-body">

@@ -2,8 +2,8 @@
 <section class="panel">
   <div class="panel-header">
     <div>
-      <h1 style="margin:0;">Search profiles</h1>
-      <p>Filter by age, location, fame, or interest</p>
+      <h1 style="margin:0;">Search</h1>
+      <p>Combine age, fame rating, location and tags</p>
     </div>
     <% if (profiles !== null) { %>
       <p class="hint"><%= profiles.length %> result<%= profiles.length === 1 ? '' : 's' %></p>
@@ -33,12 +33,12 @@
 
 <% if (profiles === null) { %>
   <section class="empty" style="margin-top:18px;">
-    Use the filters above to find specific profiles, or <a href="/browse">browse suggestions</a> instead.
+    Set at least one filter above, or open the <a href="/browse">suggestions</a>.
   </section>
 <% } else if (!profiles.length) { %>
   <section class="empty" style="margin-top:18px;">
-    <strong>No profiles match those filters.</strong>
-    Try widening the age range, removing the tag, or clearing the location.
+    <strong>No results.</strong>
+    Widen the age or fame range, or remove a tag.
   </section>
 <% } else { %>
   <section class="cards">
@@ -58,7 +58,7 @@
           </div>
           <div class="card-body">
             <p>
-              <span class="fame-pill">★ <%= p.fame %></span>
+              <span class="fame-pill">Fame <%= p.fame %></span>
               <% if (p.common_tags) { %><span class="tag-mini"><%= p.common_tags %> shared tag<%= p.common_tags === 1 ? '' : 's' %></span><% } %>
             </p>
           </div>

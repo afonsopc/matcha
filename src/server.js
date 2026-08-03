@@ -34,7 +34,7 @@ const sessionSecret = PLACEHOLDER_SECRETS.has(String(process.env.SESSION_SECRET 
   ? crypto.randomBytes(32).toString('hex')
   : process.env.SESSION_SECRET;
 if (sessionSecret !== process.env.SESSION_SECRET) {
-  console.warn('SESSION_SECRET is unset or still the placeholder — using a random secret for this run. Set a real value in .env.');
+  console.warn('SESSION_SECRET is unset or still the placeholder. Using a random secret for this run, set a real value in .env.');
 }
 
 const sessionMiddleware = session({
@@ -45,7 +45,7 @@ const sessionMiddleware = session({
 });
 
 // Only these image types may be stored, and the extension is derived from the
-// accepted type — never from the client-supplied filename.
+// accepted type, never from the client-supplied filename.
 const ALLOWED_IMAGES = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
 const IMAGE_SIGNATURES = [
   { ext: '.jpg', test: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
@@ -428,12 +428,12 @@ app.post('/register', authLimiter, (req, res) => {
     const hash = bcrypt.hashSync(password, 12);
     run('INSERT INTO users (email, username, first_name, last_name, password_hash, verify_token) VALUES (?, ?, ?, ?, ?, ?)', [values.email, values.username, values.first_name, values.last_name, hash, token]);
     const verifyUrl = `${APP_URL}/verify/${token}`;
-    // The link travels by email only — printing it in the response would let
+    // The link travels by email only. Printing it in the response would let
     // anyone "verify" an address they do not own.
-    sendMail(values.email, 'Verify your Matcha account', `Welcome to Matcha, ${values.first_name}!\n\nConfirm your account with this one-time link:\n${verifyUrl}\n\nIf you did not sign up, ignore this message.`);
+    sendMail(values.email, 'Verify your Matcha account', `Hi ${values.first_name},\n\nActivate your Matcha account with this link:\n${verifyUrl}\n\nIf you did not create this account, ignore this message.`);
     res.render('login', {
       values: { username: values.username },
-      notice: 'Account created. Check your inbox for the verification email — the account stays locked until you open the link.'
+      notice: 'Account created. Open the link we sent to your email to activate it. You cannot sign in before that.'
     });
   } catch (err) {
     const message = /UNIQUE.*email/i.test(err.message) ? 'That email is already registered.'
@@ -447,7 +447,7 @@ app.get('/verify/:token', (req, res) => {
   const user = get('SELECT id FROM users WHERE verify_token = ?', [req.params.token]);
   if (!user) return res.status(404).render('login', { values: {}, error: 'Invalid or expired verification link.' });
   run('UPDATE users SET verified = 1, verify_token = NULL WHERE id = ?', [user.id]);
-  res.render('login', { values: {}, notice: 'Account verified — you can sign in now.' });
+  res.render('login', { values: {}, notice: 'Account activated. You can sign in now.' });
 });
 
 app.get('/login', (req, res) => res.render('login', { values: {} }));
@@ -478,7 +478,7 @@ app.post('/forgot', authLimiter, (req, res) => {
     const token = crypto.randomBytes(24).toString('hex');
     run('UPDATE users SET reset_token = ?, reset_expires = ? WHERE id = ?', [token, Math.floor(Date.now() / 1000) + 3600, user.id]);
     const resetUrl = `${APP_URL}/reset/${token}`;
-    sendMail(email, 'Reset your Matcha password', `Someone asked to reset the password for @${user.username}.\n\nUse this link within the next hour:\n${resetUrl}\n\nIf it was not you, ignore this message — your password stays unchanged.`);
+    sendMail(email, 'Reset your Matcha password', `A password reset was requested for @${user.username}.\n\nThis link is valid for one hour:\n${resetUrl}\n\nIf it was not you, ignore this message. Your password stays unchanged.`);
   }
   // Always the same answer, with or without a match: the link must never reach
   // the browser, and the page must not reveal whether the email exists.
@@ -496,7 +496,7 @@ app.post('/reset/:token', authLimiter, (req, res) => {
   const user = get('SELECT * FROM users WHERE reset_token = ? AND reset_expires > ?', [req.params.token, Math.floor(Date.now() / 1000)]);
   if (!user) return res.status(404).render('forgot', { values: {}, error: 'That reset link is invalid or expired.' });
   run('UPDATE users SET password_hash = ?, reset_token = NULL, reset_expires = NULL WHERE id = ?', [bcrypt.hashSync(req.body.password, 12), user.id]);
-  res.render('login', { values: { username: user.username }, notice: 'Password updated. Sign in below.' });
+  res.render('login', { values: { username: user.username }, notice: 'Password updated.' });
 });
 
 function renderProfile(res, profile, opts = {}) {
@@ -554,7 +554,7 @@ app.post('/profile', requireAuth, upload.array('photos', 5), (req, res) => {
     if (latitude !== null && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90)) throw userError('Latitude must be between -90 and 90.');
     if (longitude !== null && (!Number.isFinite(longitude) || longitude < -180 || longitude > 180)) throw userError('Longitude must be between -180 and 180.');
     if ((latitude === null || longitude === null) && !city) {
-      throw userError('Without GPS consent we need at least your city, otherwise we cannot match you with people nearby.');
+      throw userError('Set your city, or tick the GPS box. Matching needs a location.');
     }
 
     transaction(() => {
@@ -585,10 +585,10 @@ app.post('/profile', requireAuth, upload.array('photos', 5), (req, res) => {
     const fresh = get('SELECT * FROM users WHERE id = ?', [req.user.id]);
     if (rejectedUploads || overCap) {
       const reasons = [];
-      if (rejectedUploads) reasons.push(`${rejectedUploads} file${rejectedUploads === 1 ? ' was' : 's were'} rejected: only real JPEG, PNG or WebP images are accepted`);
-      if (overCap) reasons.push(`${overCap} file${overCap === 1 ? ' was' : 's were'} skipped: you can keep 5 photos at most`);
+      if (rejectedUploads) reasons.push(`${rejectedUploads} file${rejectedUploads === 1 ? ' was' : 's were'} rejected, only JPEG, PNG and WebP are accepted`);
+      if (overCap) reasons.push(`${overCap} file${overCap === 1 ? ' was' : 's were'} skipped, the limit is 5 photos`);
       res.status(400);
-      return renderProfile(res, fresh, { error: `Profile saved, but ${reasons.join(', and ')}.` });
+      return renderProfile(res, fresh, { error: `Profile saved. ${reasons.join('. ')}.` });
     }
     renderProfile(res, fresh, { notice: 'Profile saved.' });
   } catch (err) {
@@ -678,8 +678,8 @@ app.post('/users/:id/like', requireAuth, (req, res) => {
   recalcFame(target.id);
   notify(target.id, req.user.id, 'like', `${req.user.username} liked your profile.`, `/users/${req.user.username}`);
   if (connected(req.user.id, target.id)) {
-    notify(target.id, req.user.id, 'match', `You and ${req.user.username} are connected — start chatting!`, `/chat?with=${req.user.id}`);
-    notify(req.user.id, target.id, 'match', `You and ${target.username} are connected — start chatting!`, `/chat?with=${target.id}`);
+    notify(target.id, req.user.id, 'match', `You and ${req.user.username} are now connected.`, `/chat?with=${req.user.id}`);
+    notify(req.user.id, target.id, 'match', `You and ${target.username} are now connected.`, `/chat?with=${target.id}`);
   }
   res.redirect(`/users/${target.username}`);
 });
@@ -798,7 +798,7 @@ app.use((err, req, res, next) => {
   if (res.headersSent) return next(err);
 
   // Body-parser and multer failures happen before the locals middleware runs,
-  // so the layout would blow up on undefined locals — seed them here.
+  // so the layout would blow up on undefined locals. Seed them here.
   if (res.locals.user === undefined) {
     const user = req.session ? currentUser(req) : null;
     Object.assign(res.locals, {

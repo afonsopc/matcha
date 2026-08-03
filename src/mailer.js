@@ -161,7 +161,7 @@ function createMailer(env = process.env, logger = console) {
   const smtpReady = config.mode === 'smtp' && config.host;
 
   if (config.mode === 'smtp' && !config.host) {
-    logger.warn('MAIL_MODE=smtp but SMTP_HOST is not set — falling back to console delivery.');
+    logger.warn('MAIL_MODE=smtp but SMTP_HOST is not set. Falling back to console delivery.');
   }
 
   return async function sendMail(to, subject, text) {

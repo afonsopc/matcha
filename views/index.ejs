@@ -1,27 +1,38 @@
 <%- include('partials/head') %>
 <section class="hero">
-  <div>
-    <p class="eyebrow">42 · Matcha</p>
-    <h1>People worth meeting are closer than you think.</h1>
-    <p>Build your profile, browse profiles ranked by what you share, like the ones you mean it for, and chat the moment it’s mutual.</p>
+  <div class="hero-copy">
+    <h1>Find people near you.</h1>
+    <p>Create a profile, browse the people who match what you are looking for, and chat with the ones who liked you back.</p>
     <div class="actions">
       <a class="button primary" href="/register">Create an account</a>
-      <a class="button" href="/login">I already have one</a>
+      <a class="button" href="/login">Sign in</a>
     </div>
-    <div class="feature-row">
-      <div class="feature">
-        <h3>Real matching</h3>
-        <p>Profiles are sorted by location, shared tags, and fame — not a coin toss.</p>
-      </div>
-      <div class="feature">
-        <h3>Mutual or nothing</h3>
-        <p>Chat opens only when both sides liked each other’s pictures.</p>
-      </div>
-      <div class="feature">
-        <h3>You stay in control</h3>
-        <p>Block, report, unlike, and see exactly who has viewed you.</p>
+  </div>
+  <div class="hero-art" aria-hidden="true">
+    <div class="art-card art-back"></div>
+    <div class="art-card art-mid"></div>
+    <div class="art-card art-front">
+      <div class="art-photo"><span class="art-avatar"></span></div>
+      <div class="art-lines">
+        <span class="art-line long"></span>
+        <span class="art-line short"></span>
       </div>
     </div>
+  </div>
+</section>
+
+<section class="feature-row">
+  <div class="feature">
+    <h3>Suggestions</h3>
+    <p>Profiles are ranked by distance, tags you have in common, and fame rating.</p>
+  </div>
+  <div class="feature">
+    <h3>Chat</h3>
+    <p>A conversation opens once both of you have liked each other.</p>
+  </div>
+  <div class="feature">
+    <h3>Controls</h3>
+    <p>Block or report anyone, remove a like, and see who visited your profile.</p>
   </div>
 </section>
 <%- include('partials/foot') %>

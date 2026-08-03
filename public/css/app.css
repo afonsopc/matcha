@@ -93,16 +93,6 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   color: var(--accent-dark);
   letter-spacing: -0.01em;
 }
-.brand::before {
-  content: "";
-  display: inline-block;
-  width: 14px;
-  height: 14px;
-  border-radius: 4px;
-  background: var(--accent);
-  margin-right: 8px;
-  vertical-align: -2px;
-}
 .topbar nav { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .topbar nav a {
   padding: 7px 10px;
@@ -153,35 +143,64 @@ footer.site {
 
 /* Hero */
 .hero {
-  min-height: 70vh;
   display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
   align-items: center;
-  padding: 60px 0;
-  /* Self-hosted on purpose: the app must load no third-party asset, so the
-     backdrop is drawn with gradients instead of a remote photo. */
+  gap: 40px;
+  padding: 56px 44px;
+  border-radius: 28px;
+  /* Everything here is drawn in CSS: the app must load no third-party asset. */
   background:
-    linear-gradient(90deg, rgba(246, 243, 238, 1) 0%, rgba(246, 243, 238, 0.86) 48%, rgba(246, 243, 238, 0.25) 100%),
-    radial-gradient(46% 60% at 84% 22%, rgba(198, 75, 63, 0.42), transparent 70%),
-    radial-gradient(40% 52% at 68% 82%, rgba(226, 184, 167, 0.55), transparent 72%),
-    radial-gradient(34% 44% at 96% 68%, rgba(201, 184, 226, 0.45), transparent 70%),
-    linear-gradient(140deg, #f6f3ee 0%, #f1e7dd 60%, #e8dccd 100%);
+    radial-gradient(38% 58% at 88% 18%, rgba(198, 75, 63, 0.16), transparent 70%),
+    radial-gradient(42% 60% at 74% 96%, rgba(201, 184, 226, 0.24), transparent 72%),
+    linear-gradient(135deg, #fbf8f4 0%, #f4ece3 100%);
 }
-.hero > div { width: min(640px, 100%); }
-.eyebrow {
-  display: inline-block;
-  color: var(--accent-dark);
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 13px;
-  background: var(--accent-soft);
-  padding: 4px 10px;
-  border-radius: 999px;
-}
+.hero-copy { width: min(640px, 100%); }
 h1 { margin: 14px 0 16px; font-size: clamp(34px, 6vw, 64px); line-height: 1.05; letter-spacing: -0.02em; }
 h2 { margin: 18px 0 10px; font-size: 22px; letter-spacing: -0.01em; }
 .hero p { color: var(--muted); font-size: 19px; max-width: 540px; }
 .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; align-items: center; }
+
+/* Hero artwork: a stack of profile cards, no photo and no personal data. */
+.hero-art {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 340px;
+}
+.art-card {
+  position: absolute;
+  width: 232px;
+  border-radius: 22px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 18px 40px rgba(36, 49, 46, 0.12);
+}
+.art-back,
+.art-mid {
+  height: 300px;
+}
+.art-back { transform: rotate(-9deg) translate(-34px, 10px); opacity: 0.55; }
+.art-mid { transform: rotate(5deg) translate(26px, -6px); opacity: 0.8; }
+.art-front { padding: 14px; }
+.art-photo {
+  display: grid;
+  place-items: center;
+  height: 176px;
+  border-radius: 16px;
+  background: linear-gradient(150deg, #e2b8a7 0%, #c9b8e2 100%);
+}
+.art-avatar {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 0 0 10px rgba(255, 255, 255, 0.28);
+}
+.art-lines { display: grid; gap: 7px; margin: 14px 2px 12px; }
+.art-line { height: 9px; border-radius: 999px; background: var(--line); }
+.art-line.long { width: 76%; background: var(--line-strong); }
+.art-line.short { width: 48%; }
 
 .feature-row {
   display: grid;
@@ -719,11 +738,6 @@ input:invalid:not(:placeholder-shown) { border-color: var(--err); }
   animation: toast-in .25s ease-out;
 }
 .toast.leaving { animation: toast-out .25s ease-in forwards; }
-.toast .t-icon { width: 32px; height: 32px; border-radius: 50%; background: var(--accent-soft); display: grid; place-items: center; font-size: 16px; }
-.toast.match .t-icon { background: var(--ok-soft); }
-.toast.message .t-icon { background: #e8eef5; }
-.toast.like .t-icon { background: var(--accent-soft); }
-.toast.visit .t-icon { background: var(--warn-soft); }
 .toast strong { display: block; font-size: 14px; }
 .toast small { color: var(--muted); font-size: 12px; }
 .toast a { color: var(--accent-dark); font-weight: 700; }
@@ -784,6 +798,8 @@ details.confirm .confirm-actions {
   .shell { width: calc(100% - 24px); margin: 18px auto 40px; }
   .grid.two, .chat-layout, .row, .row.three { grid-template-columns: 1fr; }
   .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hero { grid-template-columns: 1fr; padding: 36px 22px; gap: 28px; border-radius: 22px; }
+  .hero-art { min-height: 300px; }
   .profile-head { grid-template-columns: 1fr; text-align: center; }
   .profile-head img.avatar, .profile-head .placeholder { margin: 0 auto; }
   h1 { font-size: 32px; }

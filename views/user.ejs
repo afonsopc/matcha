@@ -9,7 +9,7 @@
       <% } %>
       <div>
         <h1><%= profile.first_name %> <%= profile.last_name %><%= age ? ', ' + age : '' %></h1>
-        <p>@<%= profile.username %> · <span class="fame-pill">★ <%= profile.fame %></span></p>
+        <p>@<%= profile.username %> · <span class="fame-pill">Fame <%= profile.fame %></span></p>
         <p><span class="online-dot <%= profile.online ? 'live' : '' %>"></span><%= lastSeenText(profile) %></p>
         <p>
           <%= profile.gender ? profile.gender.charAt(0).toUpperCase() + profile.gender.slice(1) : 'Gender unspecified' %>
@@ -17,24 +17,24 @@
         </p>
         <p><%= [profile.city, profile.neighborhood].filter(Boolean).join(', ') || 'Location not set' %><%= distance !== null ? ' · ' + formatDistance(distance) : '' %></p>
         <% if (isConnected) { %>
-          <span class="match-pill">✨ Connected — you can chat</span>
+          <span class="match-pill">Connected</span>
         <% } else if (likedMe) { %>
-          <span class="match-pill warn">♥ They liked you — like back to connect</span>
+          <span class="match-pill warn">They liked you</span>
         <% } else if (liked) { %>
-          <span class="match-pill warn">You liked them — waiting for a like back</span>
+          <span class="match-pill warn">You liked them</span>
         <% } %>
       </div>
     </div>
 
     <% if (typeof query !== 'undefined' && query && query.need_photo) { %>
-      <p class="flash warn">Add a profile photo on your <a href="/profile">profile page</a> before liking anyone.</p>
+      <p class="flash warn">You need a profile picture before you can like anyone. Add one on your <a href="/profile">profile</a>.</p>
     <% } %>
     <% if (typeof query !== 'undefined' && query && query.reported) { %>
-      <p class="flash notice">Thanks — we’ve recorded your report.</p>
+      <p class="flash notice">Report recorded.</p>
     <% } %>
 
     <h2>About</h2>
-    <p style="white-space:pre-wrap;"><%= profile.bio || 'No bio yet.' %></p>
+    <p style="white-space:pre-wrap;"><%= profile.bio || 'No bio.' %></p>
 
     <% if (tags.length) { %>
       <h2>Interests</h2>
@@ -44,24 +44,24 @@
     <h2>Actions</h2>
     <div class="actions">
       <% if (liked) { %>
-        <form method="post" action="/users/<%= profile.id %>/unlike" data-confirm="Remove your like? This will also disable chat if you were connected.">
+        <form method="post" action="/users/<%= profile.id %>/unlike" data-confirm="Remove your like?">
           <button type="submit">Remove like</button>
         </form>
       <% } else if (!youHavePhoto) { %>
-        <button type="button" disabled title="Add a profile photo first">♥ Like</button>
-        <span class="hint">Add a profile photo to like other users.</span>
+        <button type="button" disabled title="Add a profile picture first">Like</button>
+        <span class="hint">A profile picture is required to like other users.</span>
       <% } else { %>
         <form method="post" action="/users/<%= profile.id %>/like">
-          <button type="submit" class="primary">♥ Like</button>
+          <button type="submit" class="primary">Like</button>
         </form>
       <% } %>
       <% if (isConnected) { %>
-        <a class="button" href="/chat?with=<%= profile.id %>">💬 Open chat</a>
+        <a class="button" href="/chat?with=<%= profile.id %>">Open chat</a>
       <% } %>
       <form method="post" action="/users/<%= profile.id %>/report" data-confirm="Report this profile as fake?">
         <button type="submit" class="ghost small">Report fake</button>
       </form>
-      <form method="post" action="/users/<%= profile.id %>/block" data-confirm="Block this user? They’ll disappear from your searches.">
+      <form method="post" action="/users/<%= profile.id %>/block" data-confirm="Block this user?">
         <button type="submit" class="danger small">Block</button>
       </form>
     </div>
@@ -69,7 +69,7 @@
   <aside class="panel">
     <h2 style="margin-top:0;">Photos</h2>
     <% if (!photos.length) { %>
-      <p class="hint">No additional photos.</p>
+      <p class="hint">No photos.</p>
     <% } else { %>
       <div class="photo-gallery">
         <% photos.forEach(photo => { %>

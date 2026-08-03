@@ -2,8 +2,8 @@
 <section class="panel">
   <div class="panel-header">
     <div>
-      <h1 style="margin:0;">Suggested for you</h1>
-      <p>Profiles ranked by location, shared interests, and fame</p>
+      <h1 style="margin:0;">Suggestions</h1>
+      <p>Ranked by distance, tags in common, and fame rating</p>
     </div>
     <div style="display:flex;align-items:center;gap:12px;">
       <p class="hint"><%= profiles.length %> profile<%= profiles.length === 1 ? '' : 's' %></p>
@@ -34,8 +34,8 @@
 
 <% if (!profiles.length) { %>
   <section class="empty" style="margin-top:18px;">
-    <strong>No suggestions yet.</strong>
-    Complete your profile and add interests to get matched with others.
+    <strong>No suggestions.</strong>
+    Set your gender, orientation and location on your profile to get results here.
   </section>
 <% } else { %>
   <section class="cards">
@@ -55,7 +55,7 @@
           </div>
           <div class="card-body">
             <p>
-              <span class="fame-pill">★ <%= p.fame %></span>
+              <span class="fame-pill">Fame <%= p.fame %></span>
               <% if (p.common_tags) { %><span class="tag-mini"><%= p.common_tags %> shared tag<%= p.common_tags === 1 ? '' : 's' %></span><% } %>
             </p>
           </div>

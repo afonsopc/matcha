@@ -28,8 +28,7 @@ Seed users use password `Password123!`. Example usernames: `alice`, `bruno`, `ca
 
 ## Email
 
-Account verification and password reset links are **never** shown in the browser — they
-are only delivered by email.
+Account verification and password reset links are **never** shown in the browser. They are only delivered by email.
 
 - `MAIL_MODE=console` (default): the message is printed in the server console. Handy for
   local development.
@@ -38,6 +37,6 @@ are only delivered by email.
 
 ## Fame rating
 
-`fame = 8 × distinct people who liked you + 2 × distinct people who visited your profile
-− 12 × distinct reports`, clamped to 0–100. It is recomputed on every like, unlike, visit,
+`fame = 8 * distinct people who liked you + 2 * distinct people who visited your profile
+- 12 * distinct reports`, clamped to 0-100. It is recomputed on every like, unlike, visit,
 report and block, and the seed derives its values from the same formula.

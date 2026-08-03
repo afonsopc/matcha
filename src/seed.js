@@ -101,7 +101,7 @@ transaction(() => {
   }
 
   // Give every profile some history, then derive fame from it with the very
-  // same formula the app uses at runtime — a seeded score must never contradict
+  // same formula the app uses at runtime, so a seeded score can never contradict
   // what recalcFame() would produce.
   const ids = all('SELECT id FROM users').map((row) => row.id);
   for (const id of ids) {
