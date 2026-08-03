@@ -11,7 +11,11 @@
         <h1><%= profile.first_name %> <%= profile.last_name %><%= age ? ', ' + age : '' %></h1>
         <p>@<%= profile.username %> · <span class="fame-pill">★ <%= profile.fame %></span></p>
         <p><span class="online-dot <%= profile.online ? 'live' : '' %>"></span><%= lastSeenText(profile) %></p>
-        <p><%= profile.city || 'Location not set' %><%= distance !== null ? ' · ' + formatDistance(distance) : '' %></p>
+        <p>
+          <%= profile.gender ? profile.gender.charAt(0).toUpperCase() + profile.gender.slice(1) : 'Gender unspecified' %>
+          · interested in <%= profile.preference === 'bisexual' ? 'everyone' : (profile.preference || 'everyone') %>
+        </p>
+        <p><%= [profile.city, profile.neighborhood].filter(Boolean).join(', ') || 'Location not set' %><%= distance !== null ? ' · ' + formatDistance(distance) : '' %></p>
         <% if (isConnected) { %>
           <span class="match-pill">✨ Connected — you can chat</span>
         <% } else if (likedMe) { %>

@@ -13,8 +13,11 @@ const multer = require('multer');
 const { Server } = require('socket.io');
 const validator = require('validator');
 const { migrate, all, get, run, transaction } = require('./db');
+const { createMailer } = require('./mailer');
 
 migrate();
+// Presence lives in memory, so a restart must not leave stale "online now" flags.
+run('UPDATE users SET online = 0 WHERE online = 1');
 
 const app = express();
 const server = http.createServer(app);
@@ -22,35 +25,110 @@ const io = new Server(server);
 const PORT = Number(process.env.PORT || 3000);
 const APP_URL = process.env.APP_URL || `http://localhost:${PORT}`;
 const MAIL_MODE = process.env.MAIL_MODE || 'console';
+const sendMail = createMailer(process.env);
 const uploadDir = path.join(process.cwd(), 'public', 'uploads');
 fs.mkdirSync(uploadDir, { recursive: true });
 
+const PLACEHOLDER_SECRETS = new Set(['', 'change-this-local-secret', 'replace-with-a-random-64-hex-string']);
+const sessionSecret = PLACEHOLDER_SECRETS.has(String(process.env.SESSION_SECRET || '').trim())
+  ? crypto.randomBytes(32).toString('hex')
+  : process.env.SESSION_SECRET;
+if (sessionSecret !== process.env.SESSION_SECRET) {
+  console.warn('SESSION_SECRET is unset or still the placeholder — using a random secret for this run. Set a real value in .env.');
+}
+
 const sessionMiddleware = session({
-  secret: process.env.SESSION_SECRET || 'local-dev-secret',
+  secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
   cookie: { httpOnly: true, sameSite: 'lax', maxAge: 1000 * 60 * 60 * 24 * 7 }
 });
 
+// Only these image types may be stored, and the extension is derived from the
+// accepted type — never from the client-supplied filename.
+const ALLOWED_IMAGES = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
+const IMAGE_SIGNATURES = [
+  { ext: '.jpg', test: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
+  { ext: '.png', test: (b) => b.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
+  { ext: '.webp', test: (b) => b.slice(0, 4).toString('latin1') === 'RIFF' && b.slice(8, 12).toString('latin1') === 'WEBP' }
+];
+
+function imageExtensionFromBytes(filePath) {
+  let fd;
+  try {
+    fd = fs.openSync(filePath, 'r');
+    const head = Buffer.alloc(12);
+    fs.readSync(fd, head, 0, 12, 0);
+    const match = IMAGE_SIGNATURES.find((sig) => sig.test(head));
+    return match ? match.ext : null;
+  } catch {
+    return null;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: uploadDir,
-    filename: (req, file, cb) => cb(null, `${req.session.userId}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}${path.extname(file.originalname).toLowerCase()}`)
+    filename: (req, file, cb) => cb(null, `${req.session.userId}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ALLOWED_IMAGES[file.mimetype]}`)
   }),
-  limits: { fileSize: 3 * 1024 * 1024 },
+  limits: { fileSize: 3 * 1024 * 1024, files: 5 },
   fileFilter: (req, file, cb) => {
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) return cb(new Error('Only JPEG, PNG and WebP images are allowed.'));
+    const declaredExt = path.extname(file.originalname).toLowerCase();
+    if (!ALLOWED_IMAGES[file.mimetype] || !['.jpg', '.jpeg', '.png', '.webp'].includes(declaredExt)) {
+      return cb(userError('Only JPEG, PNG and WebP images are allowed.', 400));
+    }
     cb(null, true);
   }
 });
 
+// Drops anything whose bytes are not a real JPEG/PNG/WebP, so a renamed script
+// or HTML payload can never end up served from our own origin.
+function keepOnlyRealImages(files) {
+  const kept = [];
+  for (const file of files || []) {
+    const actualExt = imageExtensionFromBytes(file.path);
+    const storedExt = path.extname(file.filename).toLowerCase();
+    const matches = actualExt === storedExt || (actualExt === '.jpg' && storedExt === '.jpeg');
+    if (matches) kept.push(file);
+    else fs.rm(file.path, { force: true }, () => {});
+  }
+  return kept;
+}
+
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, '..', 'views'));
-app.use(helmet({ contentSecurityPolicy: false }));
-app.use('/static', express.static(path.join(process.cwd(), 'public')));
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: false,
+    directives: {
+      'default-src': ["'self'"],
+      'script-src': ["'self'"],
+      'style-src': ["'self'", "'unsafe-inline'"],
+      'img-src': ["'self'", 'data:'],
+      'connect-src': ["'self'", 'ws:', 'wss:'],
+      'form-action': ["'self'"],
+      'frame-ancestors': ["'none'"],
+      'base-uri': ["'self'"],
+      'object-src': ["'none'"]
+    }
+  },
+  crossOriginResourcePolicy: { policy: 'same-origin' }
+}));
+app.use('/static', express.static(path.join(process.cwd(), 'public'), {
+  setHeaders: (res, filePath) => {
+    // Uploads are user content: never let a browser render one as a document.
+    if (filePath.includes(`${path.sep}uploads${path.sep}`)) res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+  }
+}));
 app.use(rateLimit({ windowMs: 60 * 1000, max: 240 }));
-app.use(express.urlencoded({ extended: false }));
-app.use(express.json());
+// Generous on purpose: enough to stop scripted password guessing without ever
+// locking out an evaluator retrying a form by hand.
+const authLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 60, skipSuccessfulRequests: true });
+app.use(express.urlencoded({ extended: false, limit: '64kb' }));
+app.use(express.json({ limit: '64kb' }));
 app.use(sessionMiddleware);
 
 io.engine.use(sessionMiddleware);
@@ -117,8 +195,18 @@ function passwordOk(password) {
   return passwordIssues(password).length === 0;
 }
 
-function sendMail(to, subject, body) {
-  console.log(`\n--- Matcha email (${to}) ---\n${subject}\n${body}\n---------------------------\n`);
+// Errors we raised ourselves: their message is written for the user and may be
+// rendered. Everything else stays generic so DB internals never leak.
+function userError(message, status = 400) {
+  const err = new Error(message);
+  err.userFacing = true;
+  err.status = status;
+  return err;
+}
+
+function positiveId(value) {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : null;
 }
 
 function currentUser(req) {
@@ -134,7 +222,20 @@ function requireAuth(req, res, next) {
   next();
 }
 
+function isBlockedPair(a, b) {
+  return Boolean(get('SELECT 1 FROM blocks WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)', [a, b, b, a]));
+}
+
+// A blocked user must not reach you at all, and once you remove your like the
+// person you unliked stops generating notifications for you.
+function notificationsMuted(userId, actorId) {
+  if (!actorId || userId === actorId) return false;
+  if (isBlockedPair(userId, actorId)) return true;
+  return Boolean(get('SELECT 1 FROM unlikes WHERE unliker_id = ? AND unliked_id = ?', [userId, actorId]));
+}
+
 function notify(userId, actorId, type, body, link) {
+  if (notificationsMuted(userId, actorId)) return;
   const info = run('INSERT INTO notifications (user_id, actor_id, type, body, link) VALUES (?, ?, ?, ?, ?)', [userId, actorId || null, type, body, link || null]);
   const notification = get(`SELECT n.*, u.username AS actor_username FROM notifications n LEFT JOIN users u ON u.id = n.actor_id WHERE n.id = ?`, [info.lastInsertRowid]);
   io.to(`user:${userId}`).emit('notification', notification);
@@ -151,10 +252,13 @@ function hasProfilePhoto(userId) {
   return Boolean(get('SELECT 1 FROM photos WHERE user_id = ? AND is_profile = 1', [userId]));
 }
 
+// Fame = 8 points per distinct admirer + 2 per distinct visitor - 12 per report,
+// clamped to 0-100. Counting people rather than page loads keeps one refreshing
+// visitor from inflating the score.
 function recalcFame(userId) {
-  const likes = get('SELECT COUNT(*) AS c FROM likes WHERE liked_id = ?', [userId]).c;
-  const visits = get('SELECT COUNT(*) AS c FROM visits WHERE visited_id = ?', [userId]).c;
-  const reports = get('SELECT COUNT(*) AS c FROM reports WHERE reported_id = ?', [userId]).c;
+  const likes = get('SELECT COUNT(DISTINCT liker_id) AS c FROM likes WHERE liked_id = ?', [userId]).c;
+  const visits = get('SELECT COUNT(DISTINCT visitor_id) AS c FROM visits WHERE visited_id = ?', [userId]).c;
+  const reports = get('SELECT COUNT(DISTINCT reporter_id) AS c FROM reports WHERE reported_id = ?', [userId]).c;
   const fame = Math.max(0, Math.min(100, likes * 8 + visits * 2 - reports * 12));
   run('UPDATE users SET fame = ? WHERE id = ?', [fame, userId]);
 }
@@ -182,17 +286,23 @@ function formatDistance(km) {
   return `${km} km away`;
 }
 
+function formatDateTime(unix) {
+  return new Date(Number(unix) * 1000).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+}
+
+// Offline users must show the date AND time of their last connection, so the
+// relative wording always carries the absolute timestamp with it.
 function lastSeenText(user) {
   if (!user) return '';
   if (user.online) return 'online now';
   if (!user.last_seen) return 'never connected';
   const seconds = Math.floor(Date.now() / 1000) - Number(user.last_seen);
-  if (seconds < 60) return 'last seen just now';
-  if (seconds < 3600) return `last seen ${Math.floor(seconds / 60)} min ago`;
-  if (seconds < 86400) return `last seen ${Math.floor(seconds / 3600)} h ago`;
-  if (seconds < 2592000) return `last seen ${Math.floor(seconds / 86400)} d ago`;
-  const date = new Date(user.last_seen * 1000);
-  return `last seen ${date.toISOString().slice(0, 10)}`;
+  const stamp = formatDateTime(user.last_seen);
+  if (seconds < 60) return `last seen just now (${stamp})`;
+  if (seconds < 3600) return `last seen ${Math.floor(seconds / 60)} min ago (${stamp})`;
+  if (seconds < 86400) return `last seen ${Math.floor(seconds / 3600)} h ago (${stamp})`;
+  if (seconds < 2592000) return `last seen ${Math.floor(seconds / 86400)} d ago (${stamp})`;
+  return `last seen on ${stamp}`;
 }
 
 function unreadMessages(userId) {
@@ -236,24 +346,34 @@ function profileQuery(user, filters = {}) {
     where.push('(lower(u.city) LIKE @location OR lower(u.neighborhood) LIKE @location)');
     params.location = `%${String(filters.location).toLowerCase()}%`;
   }
-  if (filters.tag) {
-    const tag = normalizeTag(filters.tag);
-    if (tag) {
-      where.push(`EXISTS (SELECT 1 FROM user_tags ut JOIN tags t ON t.id = ut.tag_id WHERE ut.user_id = u.id AND t.name = @tag)`);
-      params.tag = tag;
-    }
-  }
+  // Accepts one or several tags ("coffee, geek" or ?tag=a&tag=b): every one of
+  // them must be present on the candidate profile.
+  const wantedTags = [].concat(filters.tag || [])
+    .flatMap((value) => String(value).split(/[,\s]+/))
+    .map(normalizeTag)
+    .filter(Boolean)
+    .slice(0, 5);
+  wantedTags.forEach((tag, index) => {
+    where.push(`EXISTS (SELECT 1 FROM user_tags ut JOIN tags t ON t.id = ut.tag_id WHERE ut.user_id = u.id AND t.name = @tag${index})`);
+    params[`tag${index}`] = tag;
+  });
 
   const sortMap = {
     age: 'u.birthdate DESC',
-    location: 'same_city DESC, u.city ASC',
+    location: '(distance_km IS NULL), distance_km ASC, same_city DESC, u.city ASC',
     fame: 'u.fame DESC',
     tags: 'common_tags DESC'
   };
-  const sort = sortMap[filters.sort] || 'same_city DESC, common_tags DESC, u.fame DESC';
+  const requestedSort = typeof filters.sort === 'string' && Object.prototype.hasOwnProperty.call(sortMap, filters.sort)
+    ? filters.sort
+    : null;
+  const sort = requestedSort ? sortMap[requestedSort] : 'same_city DESC, common_tags DESC, u.fame DESC';
 
+  params.myLat = user.latitude;
+  params.myLng = user.longitude;
   const rows = all(`
     SELECT u.*, p.filename AS profile_photo,
+      distance_km(@myLat, @myLng, u.latitude, u.longitude) AS distance_km,
       CASE WHEN lower(coalesce(u.city,'')) = lower(coalesce((SELECT city FROM users WHERE id = @me),'')) THEN 1 ELSE 0 END AS same_city,
       (SELECT COUNT(*) FROM user_tags mine JOIN user_tags theirs ON theirs.tag_id = mine.tag_id WHERE mine.user_id = @me AND theirs.user_id = u.id) AS common_tags
     FROM users u
@@ -286,7 +406,7 @@ app.get('/', (req, res) => {
 });
 
 app.get('/register', (req, res) => res.render('register', { values: {} }));
-app.post('/register', (req, res) => {
+app.post('/register', authLimiter, (req, res) => {
   const values = {
     email: sanitizeText(req.body.email, 120).toLowerCase(),
     username: sanitizeText(req.body.username, 32),
@@ -308,11 +428,13 @@ app.post('/register', (req, res) => {
     const hash = bcrypt.hashSync(password, 12);
     run('INSERT INTO users (email, username, first_name, last_name, password_hash, verify_token) VALUES (?, ?, ?, ?, ?, ?)', [values.email, values.username, values.first_name, values.last_name, hash, token]);
     const verifyUrl = `${APP_URL}/verify/${token}`;
-    sendMail(values.email, 'Verify your Matcha account', verifyUrl);
-    const notice = MAIL_MODE === 'console'
-      ? `Account created. Dev mode — verify here: ${verifyUrl}`
-      : 'Account created. Check your inbox for the verification email.';
-    res.render('login', { values: { username: values.username }, notice });
+    // The link travels by email only — printing it in the response would let
+    // anyone "verify" an address they do not own.
+    sendMail(values.email, 'Verify your Matcha account', `Welcome to Matcha, ${values.first_name}!\n\nConfirm your account with this one-time link:\n${verifyUrl}\n\nIf you did not sign up, ignore this message.`);
+    res.render('login', {
+      values: { username: values.username },
+      notice: 'Account created. Check your inbox for the verification email — the account stays locked until you open the link.'
+    });
   } catch (err) {
     const message = /UNIQUE.*email/i.test(err.message) ? 'That email is already registered.'
       : /UNIQUE.*username/i.test(err.message) ? 'That username is taken.'
@@ -329,7 +451,7 @@ app.get('/verify/:token', (req, res) => {
 });
 
 app.get('/login', (req, res) => res.render('login', { values: {} }));
-app.post('/login', (req, res) => {
+app.post('/login', authLimiter, (req, res) => {
   const username = sanitizeText(req.body.username, 32);
   const values = { username };
   const user = get('SELECT * FROM users WHERE username = ?', [username]);
@@ -349,20 +471,18 @@ app.post('/logout', requireAuth, (req, res) => {
 });
 
 app.get('/forgot', (req, res) => res.render('forgot', { values: {} }));
-app.post('/forgot', (req, res) => {
+app.post('/forgot', authLimiter, (req, res) => {
   const email = sanitizeText(req.body.email, 120).toLowerCase();
   const user = get('SELECT * FROM users WHERE email = ?', [email]);
-  let devLink = null;
   if (user) {
     const token = crypto.randomBytes(24).toString('hex');
     run('UPDATE users SET reset_token = ?, reset_expires = ? WHERE id = ?', [token, Math.floor(Date.now() / 1000) + 3600, user.id]);
-    devLink = `${APP_URL}/reset/${token}`;
-    sendMail(email, 'Reset your Matcha password', devLink);
+    const resetUrl = `${APP_URL}/reset/${token}`;
+    sendMail(email, 'Reset your Matcha password', `Someone asked to reset the password for @${user.username}.\n\nUse this link within the next hour:\n${resetUrl}\n\nIf it was not you, ignore this message — your password stays unchanged.`);
   }
-  const notice = MAIL_MODE === 'console' && devLink
-    ? `If that email is registered, a reset link was sent. Dev mode — open: ${devLink}`
-    : 'If that email is registered, a reset link was sent.';
-  res.render('forgot', { values: { email }, notice });
+  // Always the same answer, with or without a match: the link must never reach
+  // the browser, and the page must not reveal whether the email exists.
+  res.render('forgot', { values: { email }, notice: 'If that email is registered, a reset link was sent.' });
 });
 
 app.get('/reset/:token', (req, res) => {
@@ -370,7 +490,7 @@ app.get('/reset/:token', (req, res) => {
   if (!user) return res.status(404).render('forgot', { values: {}, error: 'That reset link is invalid or expired.' });
   res.render('reset', { token: req.params.token });
 });
-app.post('/reset/:token', (req, res) => {
+app.post('/reset/:token', authLimiter, (req, res) => {
   const issues = passwordIssues(req.body.password);
   if (issues.length) return res.status(400).render('reset', { token: req.params.token, error: `Password needs ${issues.join(', ')}.` });
   const user = get('SELECT * FROM users WHERE reset_token = ? AND reset_expires > ?', [req.params.token, Math.floor(Date.now() / 1000)]);
@@ -382,7 +502,9 @@ app.post('/reset/:token', (req, res) => {
 function renderProfile(res, profile, opts = {}) {
   const tags = all('SELECT t.name FROM tags t JOIN user_tags ut ON ut.tag_id = t.id WHERE ut.user_id = ? ORDER BY t.name', [profile.id]);
   const photos = all('SELECT * FROM photos WHERE user_id = ? ORDER BY is_profile DESC, created_at DESC', [profile.id]);
-  const visits = all(`SELECT u.username, u.first_name, u.last_name, p.filename AS profile_photo, v.created_at FROM visits v JOIN users u ON u.id = v.visitor_id LEFT JOIN photos p ON p.user_id = u.id AND p.is_profile = 1 WHERE v.visited_id = ? ORDER BY v.created_at DESC LIMIT 12`, [profile.id]);
+  // One row per visitor (their latest visit), so a single person refreshing the
+  // page cannot push everyone else out of the history.
+  const visits = all(`SELECT u.username, u.first_name, u.last_name, p.filename AS profile_photo, MAX(v.created_at) AS created_at, COUNT(*) AS visit_count FROM visits v JOIN users u ON u.id = v.visitor_id LEFT JOIN photos p ON p.user_id = u.id AND p.is_profile = 1 WHERE v.visited_id = ? GROUP BY v.visitor_id ORDER BY created_at DESC LIMIT 12`, [profile.id]);
   const likes = all(`SELECT u.username, u.first_name, u.last_name, p.filename AS profile_photo, l.created_at FROM likes l JOIN users u ON u.id = l.liker_id LEFT JOIN photos p ON p.user_id = u.id AND p.is_profile = 1 WHERE l.liked_id = ? ORDER BY l.created_at DESC LIMIT 12`, [profile.id]);
   return res.render('profile', {
     profile,
@@ -402,30 +524,43 @@ app.get('/profile', requireAuth, (req, res) => {
 });
 
 app.post('/profile', requireAuth, upload.array('photos', 5), (req, res) => {
+  const uploaded = keepOnlyRealImages(req.files);
+  const rejectedUploads = (req.files || []).length - uploaded.length;
+  let overCap = 0;
   try {
     const firstName = sanitizeText(req.body.first_name, 60);
     const lastName = sanitizeText(req.body.last_name, 60);
     const email = sanitizeText(req.body.email, 120).toLowerCase();
     const bio = sanitizeText(req.body.bio, 900);
+    const city = sanitizeText(req.body.city, 80);
+    const neighborhood = sanitizeText(req.body.neighborhood, 80);
     const gender = ['man', 'woman', 'other'].includes(req.body.gender) ? req.body.gender : null;
     const preference = ['men', 'women', 'bisexual'].includes(req.body.preference) ? req.body.preference : 'bisexual';
-    if (!firstName) throw new Error('First name is required.');
-    if (!lastName) throw new Error('Last name is required.');
-    if (!validator.isEmail(email)) throw new Error('Enter a valid email address.');
+    if (!firstName) throw userError('First name is required.');
+    if (!lastName) throw userError('Last name is required.');
+    if (!validator.isEmail(email)) throw userError('Enter a valid email address.');
     if (req.body.birthdate) {
       const age = ageFromBirthdate(req.body.birthdate);
-      if (age == null) throw new Error('Birthdate is invalid.');
-      if (age < 18) throw new Error('You must be at least 18 years old.');
-      if (age > 120) throw new Error('That birthdate looks unrealistic.');
+      if (age == null) throw userError('Birthdate is invalid.');
+      if (age < 18) throw userError('You must be at least 18 years old.');
+      if (age > 120) throw userError('That birthdate looks unrealistic.');
     }
+
+    // GPS coordinates are only kept while consent is ticked; without them a
+    // manual city is mandatory, since matching is location-driven.
+    const consent = req.body.location_consent ? 1 : 0;
+    const latitude = consent && req.body.latitude !== '' && req.body.latitude != null ? Number(req.body.latitude) : null;
+    const longitude = consent && req.body.longitude !== '' && req.body.longitude != null ? Number(req.body.longitude) : null;
+    if (latitude !== null && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90)) throw userError('Latitude must be between -90 and 90.');
+    if (longitude !== null && (!Number.isFinite(longitude) || longitude < -180 || longitude > 180)) throw userError('Longitude must be between -180 and 180.');
+    if ((latitude === null || longitude === null) && !city) {
+      throw userError('Without GPS consent we need at least your city, otherwise we cannot match you with people nearby.');
+    }
+
     transaction(() => {
       run(`UPDATE users SET first_name=?, last_name=?, email=?, gender=?, preference=?, birthdate=?, bio=?, city=?, neighborhood=?, latitude=?, longitude=?, location_consent=? WHERE id=?`, [
         firstName, lastName, email, gender, preference, req.body.birthdate || null, bio,
-        sanitizeText(req.body.city, 80), sanitizeText(req.body.neighborhood, 80),
-        req.body.latitude ? Number(req.body.latitude) : null,
-        req.body.longitude ? Number(req.body.longitude) : null,
-        req.body.location_consent ? 1 : 0,
-        req.user.id
+        city, neighborhood, latitude, longitude, consent, req.user.id
       ]);
       run('DELETE FROM user_tags WHERE user_id = ?', [req.user.id]);
       String(req.body.tags || '').split(/[,\s]+/).map(normalizeTag).filter(Boolean).slice(0, 15).forEach((name) => {
@@ -434,22 +569,42 @@ app.post('/profile', requireAuth, upload.array('photos', 5), (req, res) => {
         run('INSERT OR IGNORE INTO user_tags (user_id, tag_id) VALUES (?, ?)', [req.user.id, tag.id]);
       });
       let count = get('SELECT COUNT(*) AS c FROM photos WHERE user_id = ?', [req.user.id]).c;
-      for (const file of req.files || []) {
-        if (count >= 5) break;
+      for (const file of uploaded) {
+        // Past the 5-photo cap the file is dropped from disk too, so no
+        // unreferenced upload is left behind.
+        if (count >= 5) {
+          overCap += 1;
+          fs.rm(file.path, { force: true }, () => {});
+          continue;
+        }
         const hasProfile = hasProfilePhoto(req.user.id);
         run('INSERT INTO photos (user_id, filename, is_profile) VALUES (?, ?, ?)', [req.user.id, file.filename, hasProfile ? 0 : 1]);
         count += 1;
       }
     });
     const fresh = get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+    if (rejectedUploads || overCap) {
+      const reasons = [];
+      if (rejectedUploads) reasons.push(`${rejectedUploads} file${rejectedUploads === 1 ? ' was' : 's were'} rejected: only real JPEG, PNG or WebP images are accepted`);
+      if (overCap) reasons.push(`${overCap} file${overCap === 1 ? ' was' : 's were'} skipped: you can keep 5 photos at most`);
+      res.status(400);
+      return renderProfile(res, fresh, { error: `Profile saved, but ${reasons.join(', and ')}.` });
+    }
     renderProfile(res, fresh, { notice: 'Profile saved.' });
   } catch (err) {
+    for (const file of uploaded) fs.rm(file.path, { force: true }, () => {});
+    if (/UNIQUE.*email/i.test(err.message)) {
+      res.status(409);
+      return renderProfile(res, req.user, { error: 'That email is already used by another account.' });
+    }
+    if (!err.userFacing) throw err;
+    res.status(err.status || 400);
     renderProfile(res, req.user, { error: err.message });
   }
 });
 
 app.post('/photos/:id/profile', requireAuth, (req, res) => {
-  const photo = get('SELECT * FROM photos WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
+  const photo = get('SELECT * FROM photos WHERE id = ? AND user_id = ?', [positiveId(req.params.id), req.user.id]);
   if (photo) {
     run('UPDATE photos SET is_profile = 0 WHERE user_id = ?', [req.user.id]);
     run('UPDATE photos SET is_profile = 1 WHERE id = ?', [photo.id]);
@@ -458,7 +613,7 @@ app.post('/photos/:id/profile', requireAuth, (req, res) => {
 });
 
 app.post('/photos/:id/delete', requireAuth, (req, res) => {
-  const photo = get('SELECT * FROM photos WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
+  const photo = get('SELECT * FROM photos WHERE id = ? AND user_id = ?', [positiveId(req.params.id), req.user.id]);
   if (photo) {
     const wasProfile = photo.is_profile === 1;
     run('DELETE FROM photos WHERE id = ?', [photo.id]);
@@ -510,13 +665,16 @@ app.get('/users/:username', requireAuth, (req, res) => {
 });
 
 app.post('/users/:id/like', requireAuth, (req, res) => {
-  const target = get('SELECT * FROM users WHERE id = ?', [req.params.id]);
-  if (!target) return res.redirect('/browse');
+  const target = get('SELECT * FROM users WHERE id = ?', [positiveId(req.params.id)]);
+  if (!target) return res.status(404).render('error', { message: 'Profile not found.' });
   if (target.id === req.user.id) return res.redirect('/browse');
+  if (isBlockedPair(req.user.id, target.id)) return res.status(404).render('error', { message: 'Profile not available.' });
   if (!hasProfilePhoto(req.user.id)) {
     return res.redirect(`/users/${target.username}?need_photo=1`);
   }
   run('INSERT OR IGNORE INTO likes (liker_id, liked_id) VALUES (?, ?)', [req.user.id, target.id]);
+  // Liking again lifts the notification mute a previous unlike had set.
+  run('DELETE FROM unlikes WHERE unliker_id = ? AND unliked_id = ?', [req.user.id, target.id]);
   recalcFame(target.id);
   notify(target.id, req.user.id, 'like', `${req.user.username} liked your profile.`, `/users/${req.user.username}`);
   if (connected(req.user.id, target.id)) {
@@ -527,27 +685,37 @@ app.post('/users/:id/like', requireAuth, (req, res) => {
 });
 
 app.post('/users/:id/unlike', requireAuth, (req, res) => {
-  const target = get('SELECT * FROM users WHERE id = ?', [req.params.id]);
-  if (target) {
-    const wasConnected = connected(req.user.id, target.id);
-    run('DELETE FROM likes WHERE liker_id = ? AND liked_id = ?', [req.user.id, target.id]);
-    recalcFame(target.id);
-    if (wasConnected) notify(target.id, req.user.id, 'unlike', `${req.user.username} disconnected from you.`, `/users/${req.user.username}`);
-  }
-  res.redirect(target ? `/users/${target.username}` : '/browse');
+  const target = get('SELECT * FROM users WHERE id = ?', [positiveId(req.params.id)]);
+  if (!target) return res.status(404).render('error', { message: 'Profile not found.' });
+  const wasConnected = connected(req.user.id, target.id);
+  const had = get('SELECT 1 FROM likes WHERE liker_id = ? AND liked_id = ?', [req.user.id, target.id]);
+  run('DELETE FROM likes WHERE liker_id = ? AND liked_id = ?', [req.user.id, target.id]);
+  // Removing a like also silences that person: no more likes, visits or
+  // messages from them until this user likes them again.
+  if (had) run('INSERT OR IGNORE INTO unlikes (unliker_id, unliked_id) VALUES (?, ?)', [req.user.id, target.id]);
+  recalcFame(target.id);
+  if (wasConnected) notify(target.id, req.user.id, 'unlike', `${req.user.username} disconnected from you.`, `/users/${req.user.username}`);
+  res.redirect(`/users/${target.username}`);
 });
 
 app.post('/users/:id/block', requireAuth, (req, res) => {
-  run('INSERT OR IGNORE INTO blocks (blocker_id, blocked_id) VALUES (?, ?)', [req.user.id, req.params.id]);
-  run('DELETE FROM likes WHERE (liker_id = ? AND liked_id = ?) OR (liker_id = ? AND liked_id = ?)', [req.user.id, req.params.id, req.params.id, req.user.id]);
+  const targetId = positiveId(req.params.id);
+  const target = targetId && get('SELECT id FROM users WHERE id = ?', [targetId]);
+  if (!target || target.id === req.user.id) return res.status(404).render('error', { message: 'Profile not found.' });
+  run('INSERT OR IGNORE INTO blocks (blocker_id, blocked_id) VALUES (?, ?)', [req.user.id, target.id]);
+  run('DELETE FROM likes WHERE (liker_id = ? AND liked_id = ?) OR (liker_id = ? AND liked_id = ?)', [req.user.id, target.id, target.id, req.user.id]);
+  recalcFame(req.user.id);
+  recalcFame(target.id);
   res.redirect('/browse');
 });
 
 app.post('/users/:id/report', requireAuth, (req, res) => {
-  run('INSERT OR IGNORE INTO reports (reporter_id, reported_id, reason) VALUES (?, ?, ?)', [req.user.id, req.params.id, 'fake account']);
-  recalcFame(req.params.id);
-  const target = get('SELECT username FROM users WHERE id = ?', [req.params.id]);
-  res.redirect(target ? `/users/${target.username}?reported=1` : '/browse');
+  const targetId = positiveId(req.params.id);
+  const target = targetId && get('SELECT username FROM users WHERE id = ?', [targetId]);
+  if (!target || targetId === req.user.id) return res.status(404).render('error', { message: 'Profile not found.' });
+  run('INSERT OR IGNORE INTO reports (reporter_id, reported_id, reason) VALUES (?, ?, ?)', [req.user.id, targetId, 'fake account']);
+  recalcFame(targetId);
+  res.redirect(`/users/${target.username}?reported=1`);
 });
 
 app.get('/chat', requireAuth, (req, res) => {
@@ -564,15 +732,22 @@ app.get('/chat', requireAuth, (req, res) => {
   `, [req.user.id, req.user.id, req.user.id, req.user.id, req.user.id, req.user.id, req.user.id, req.user.id]);
   const activeId = Number(req.query.with || (people[0] && people[0].id));
   const active = people.find((p) => p.id === activeId);
-  const messages = active ? all(`SELECT * FROM messages WHERE (sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?) ORDER BY created_at ASC LIMIT 200`, [req.user.id, active.id, active.id, req.user.id]) : [];
+  // Keep the 200 most recent messages, then show them oldest-first.
+  const messages = active ? all(`
+    SELECT * FROM (
+      SELECT * FROM messages
+      WHERE (sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?)
+      ORDER BY created_at DESC, id DESC LIMIT 200
+    ) ORDER BY created_at ASC, id ASC
+  `, [req.user.id, active.id, active.id, req.user.id]) : [];
   if (active) run('UPDATE messages SET read_at = strftime(\'%s\',\'now\') WHERE sender_id = ? AND receiver_id = ? AND read_at IS NULL', [active.id, req.user.id]);
   res.render('chat', { people, active, messages });
 });
 
 app.post('/chat/:id', requireAuth, (req, res) => {
-  const receiver = get('SELECT * FROM users WHERE id = ?', [req.params.id]);
+  const receiver = get('SELECT * FROM users WHERE id = ?', [positiveId(req.params.id)]);
   const body = sanitizeText(req.body.body, 1000);
-  if (!receiver || !body || !connected(req.user.id, receiver.id)) return res.status(400).redirect('/chat');
+  if (!receiver || !body || !connected(req.user.id, receiver.id) || isBlockedPair(req.user.id, receiver.id)) return res.redirect('/chat');
   const info = run('INSERT INTO messages (sender_id, receiver_id, body) VALUES (?, ?, ?)', [req.user.id, receiver.id, body]);
   const message = get('SELECT * FROM messages WHERE id = ?', [info.lastInsertRowid]);
   const payload = { ...message, sender_username: req.user.username };
@@ -580,6 +755,16 @@ app.post('/chat/:id', requireAuth, (req, res) => {
   io.to(`user:${req.user.id}`).emit('message', payload);
   notify(receiver.id, req.user.id, 'message', `${req.user.username}: ${body.slice(0, 60)}${body.length > 60 ? '…' : ''}`, `/chat?with=${req.user.id}`);
   res.redirect(`/chat?with=${receiver.id}`);
+});
+
+// Feeds the interest autocomplete: tags are shared across users, so the ones
+// already in use are offered back as suggestions, most popular first.
+app.get('/tags', requireAuth, (req, res) => {
+  const search = normalizeTag(req.query.q);
+  const rows = search
+    ? all('SELECT t.name, COUNT(ut.user_id) AS uses FROM tags t LEFT JOIN user_tags ut ON ut.tag_id = t.id WHERE t.name LIKE @prefix GROUP BY t.id ORDER BY uses DESC, t.name ASC LIMIT 12', { prefix: `${search}%` })
+    : all('SELECT t.name, COUNT(ut.user_id) AS uses FROM tags t LEFT JOIN user_tags ut ON ut.tag_id = t.id GROUP BY t.id ORDER BY uses DESC, t.name ASC LIMIT 30');
+  res.json(rows);
 });
 
 app.get('/notifications', requireAuth, (req, res) => {
@@ -600,15 +785,48 @@ io.on('connection', (socket) => {
   });
 });
 
+const EXPECTED_ERROR_CODES = new Set(['LIMIT_FILE_SIZE', 'LIMIT_FILE_COUNT', 'LIMIT_UNEXPECTED_FILE', 'entity.too.large', 'entity.parse.failed']);
+
 app.use((err, req, res, next) => {
-  console.error(err);
-  if (err && err.code === 'LIMIT_FILE_SIZE') {
-    if (req.path === '/profile') {
-      return renderProfile(res, req.user || currentUser(req), { error: 'Each photo must be 3 MB or smaller.' });
-    }
-    return res.status(400).render('error', { message: 'Each photo must be 3 MB or smaller.' });
+  // A rejected upload or a malformed body is a normal outcome, not an incident:
+  // log one line for those and keep stack traces for genuine faults.
+  if (err && (err.userFacing || EXPECTED_ERROR_CODES.has(err.code) || EXPECTED_ERROR_CODES.has(err.type))) {
+    console.warn(`${req.method} ${req.path}: ${err.message}`);
+  } else {
+    console.error(err);
   }
-  res.status(400).render('error', { message: err.message || 'Something went wrong with that request.' });
+  if (res.headersSent) return next(err);
+
+  // Body-parser and multer failures happen before the locals middleware runs,
+  // so the layout would blow up on undefined locals — seed them here.
+  if (res.locals.user === undefined) {
+    const user = req.session ? currentUser(req) : null;
+    Object.assign(res.locals, {
+      user,
+      unreadCount: 0,
+      unreadMessages: 0,
+      error: null,
+      notice: null,
+      values: {},
+      lastSeenText,
+      formatDistance,
+      devMail: MAIL_MODE === 'console',
+      currentPath: req.path
+    });
+  }
+
+  if (err && (err.code === 'LIMIT_FILE_SIZE' || err.code === 'LIMIT_FILE_COUNT')) {
+    const message = err.code === 'LIMIT_FILE_SIZE' ? 'Each photo must be 3 MB or smaller.' : 'You can upload at most 5 photos at a time.';
+    res.status(400);
+    if (req.path === '/profile' && res.locals.user) return renderProfile(res, res.locals.user, { error: message });
+    return res.render('error', { message });
+  }
+
+  // Only messages we wrote ourselves reach the user; anything else (SQLite,
+  // EJS, Node) would leak internals, so it becomes a generic sentence.
+  const status = err && err.status >= 400 && err.status < 500 ? err.status : 400;
+  const message = err && err.userFacing && err.message ? err.message : 'Something went wrong with that request.';
+  res.status(status).render('error', { message });
 });
 
 app.use((req, res) => res.status(404).render('error', { message: 'Page not found.' }));

@@ -15,7 +15,7 @@
     <label>Min fame <input name="minFame" type="number" min="0" max="100" placeholder="0" value="<%= query.minFame || '' %>"></label>
     <label>Max fame <input name="maxFame" type="number" min="0" max="100" placeholder="100" value="<%= query.maxFame || '' %>"></label>
     <label>Location <input name="location" placeholder="City or neighborhood" value="<%= query.location || '' %>"></label>
-    <label>Tag <input name="tag" placeholder="e.g. coffee" value="<%= query.tag || '' %>"></label>
+    <label>Tags <input name="tag" placeholder="e.g. coffee, hiking" value="<%= [].concat(query.tag || '').join(', ') %>" list="tag-options"></label>
     <label>Sort by
       <select name="sort">
         <% [['','Best match'],['age','Age'],['location','Location'],['fame','Fame'],['tags','Common tags']].forEach(([v,l]) => { %>
@@ -28,6 +28,7 @@
       <button class="primary" type="submit">Search</button>
     </div>
   </form>
+  <datalist id="tag-options"></datalist>
 </section>
 
 <% if (profiles === null) { %>

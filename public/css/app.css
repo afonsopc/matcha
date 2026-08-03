@@ -157,9 +157,14 @@ footer.site {
   display: grid;
   align-items: center;
   padding: 60px 0;
+  /* Self-hosted on purpose: the app must load no third-party asset, so the
+     backdrop is drawn with gradients instead of a remote photo. */
   background:
-    linear-gradient(90deg, rgba(246, 243, 238, 1) 0%, rgba(246, 243, 238, 0.86) 55%, rgba(246, 243, 238, 0.4) 100%),
-    url("https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=1600&q=80") center/cover;
+    linear-gradient(90deg, rgba(246, 243, 238, 1) 0%, rgba(246, 243, 238, 0.86) 48%, rgba(246, 243, 238, 0.25) 100%),
+    radial-gradient(46% 60% at 84% 22%, rgba(198, 75, 63, 0.42), transparent 70%),
+    radial-gradient(40% 52% at 68% 82%, rgba(226, 184, 167, 0.55), transparent 72%),
+    radial-gradient(34% 44% at 96% 68%, rgba(201, 184, 226, 0.45), transparent 70%),
+    linear-gradient(140deg, #f6f3ee 0%, #f1e7dd 60%, #e8dccd 100%);
 }
 .hero > div { width: min(640px, 100%); }
 .eyebrow {
@@ -204,6 +209,7 @@ h2 { margin: 18px 0 10px; font-size: 22px; letter-spacing: -0.01em; }
 .panel + .panel { margin-top: 18px; }
 .panel-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: baseline;
   gap: 12px;
@@ -447,6 +453,34 @@ input:invalid:not(:placeholder-shown) { border-color: var(--err); }
   background: transparent;
 }
 .tags-input input:focus { outline: none; box-shadow: none; }
+
+.tag-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+.tag-suggestions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.tag-suggestions button:hover { border-style: solid; border-color: var(--accent); color: var(--ink); }
+.tag-suggestions button small {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--line);
+  font-size: 0.72rem;
+}
 
 .photos {
   display: grid;

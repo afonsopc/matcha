@@ -54,8 +54,9 @@
         <span class="hint" data-geo-status></span>
       </div>
       <label class="check"><input name="location_consent" type="checkbox" <%= profile.location_consent ? 'checked' : '' %>> Use my GPS coordinates for matching</label>
+      <span class="hint">Coordinates are stored only while this box is ticked. If you leave it off, fill in your city so we can still match you locally.</span>
       <label>Interests
-        <span class="hint">Type a tag and press Enter (max 15).</span>
+        <span class="hint">Type a tag and press Enter (max 15). Suggestions come from tags other members already use.</span>
         <input name="tags" value="<%= tags.map(t => t.name).join(', ') %>" data-tags-input>
       </label>
       <label>Add photos
@@ -119,7 +120,7 @@
             <% if (v.profile_photo) { %><img src="/static/uploads/<%= v.profile_photo %>" alt=""><% } else { %><div class="placeholder">👤</div><% } %>
             <div>
               <a href="/users/<%= v.username %>">@<%= v.username %></a>
-              <small><%= v.first_name %> <%= v.last_name %></small>
+              <small><%= v.first_name %> <%= v.last_name %><%= v.visit_count > 1 ? ` · ${v.visit_count} visits` : '' %></small>
             </div>
           </li>
         <% }) %>

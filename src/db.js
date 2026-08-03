@@ -9,6 +9,17 @@ const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
+// Great-circle distance in km, so ordering by proximity happens in SQL and the
+// "nearest 100" window is picked before any LIMIT is applied.
+db.function('distance_km', { deterministic: true }, (lat1, lon1, lat2, lon2) => {
+  if ([lat1, lon1, lat2, lon2].some((n) => n === null || n === undefined)) return null;
+  const toRad = (n) => (Number(n) * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.sin(dLon / 2) ** 2 * Math.cos(toRad(lat1)) * Math.cos(toRad(lat2));
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+});
+
 function migrate() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -69,6 +80,13 @@ function migrate() {
       created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
     );
 
+    CREATE TABLE IF NOT EXISTS unlikes (
+      unliker_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      unliked_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+      PRIMARY KEY (unliker_id, unliked_id)
+    );
+
     CREATE TABLE IF NOT EXISTS blocks (
       blocker_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       blocked_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -103,6 +121,11 @@ function migrate() {
       read_at INTEGER,
       created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
     );
+
+    CREATE INDEX IF NOT EXISTS idx_visits_visited ON visits (visited_id);
+    CREATE INDEX IF NOT EXISTS idx_likes_liked ON likes (liked_id);
+    CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages (sender_id, receiver_id);
+    CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications (user_id, read_at);
   `);
 
   const hasLink = db.prepare("PRAGMA table_info(notifications)").all().some((c) => c.name === 'link');

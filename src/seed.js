@@ -3,7 +3,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
-const { migrate, get, run, transaction } = require('./db');
+const { migrate, all, get, run, transaction } = require('./db');
 
 migrate();
 
@@ -73,11 +73,12 @@ transaction(() => {
     const jitter = () => (Math.random() - 0.5) / 30;
     const info = run(
       `INSERT INTO users (email, username, first_name, last_name, password_hash, verified, gender, preference, birthdate, bio, city, neighborhood, latitude, longitude, location_consent, fame, online, last_seen)
-       VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 0, strftime('%s','now'))`,
+       VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0, ?)`,
       [
         `${username}@matcha.local`, username, first, last, passwordHash, gender, preference,
         birthdate(18 + Math.floor(Math.random() * 35)), pick(bios), city, neighborhood,
-        lat + jitter(), lng + jitter(), Math.floor(Math.random() * 80)
+        lat + jitter(), lng + jitter(),
+        Math.floor(Date.now() / 1000) - Math.floor(Math.random() * 20 * 86400)
       ]
     );
 
@@ -98,6 +99,29 @@ transaction(() => {
     run('INSERT OR IGNORE INTO likes (liker_id, liked_id) VALUES (?, ?)', [alice.id, bruno.id]);
     run('INSERT OR IGNORE INTO likes (liker_id, liked_id) VALUES (?, ?)', [bruno.id, alice.id]);
   }
+
+  // Give every profile some history, then derive fame from it with the very
+  // same formula the app uses at runtime — a seeded score must never contradict
+  // what recalcFame() would produce.
+  const ids = all('SELECT id FROM users').map((row) => row.id);
+  for (const id of ids) {
+    const admirers = sample(ids.filter((other) => other !== id), Math.floor(Math.random() * 9));
+    for (const admirer of admirers) run('INSERT OR IGNORE INTO likes (liker_id, liked_id) VALUES (?, ?)', [admirer, id]);
+    const visitors = sample(ids.filter((other) => other !== id), Math.floor(Math.random() * 16));
+    for (const visitor of visitors) {
+      run('INSERT INTO visits (visitor_id, visited_id, created_at) VALUES (?, ?, ?)', [
+        visitor, id, Math.floor(Date.now() / 1000) - Math.floor(Math.random() * 30 * 86400)
+      ]);
+    }
+  }
+  run(`
+    UPDATE users SET fame = MAX(0, MIN(100,
+      (SELECT COUNT(DISTINCT liker_id) FROM likes WHERE liked_id = users.id) * 8 +
+      (SELECT COUNT(DISTINCT visitor_id) FROM visits WHERE visited_id = users.id) * 2 -
+      (SELECT COUNT(DISTINCT reporter_id) FROM reports WHERE reported_id = users.id) * 12
+    ))
+  `);
 });
 
-console.log('Seed complete. Login with alice / Password123!');
+const total = get('SELECT COUNT(*) AS c FROM users').c;
+console.log(`Seed complete: ${total} profiles. Login with alice / Password123!`);

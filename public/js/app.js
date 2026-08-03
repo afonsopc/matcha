@@ -8,6 +8,7 @@
     setupBadges();
     setupPasswordHelpers();
     setupTagInput();
+    setupTagDatalist();
     setupGeolocation();
     setupChat();
     setupLightbox();
@@ -112,6 +113,30 @@
     });
   }
 
+  // ---------- Shared tag vocabulary ----------
+  let tagVocabulary = null;
+  function loadTags() {
+    if (tagVocabulary) return tagVocabulary;
+    tagVocabulary = fetch('/tags', { headers: { Accept: 'application/json' } })
+      .then((r) => (r.ok ? r.json() : []))
+      .catch(() => []);
+    return tagVocabulary;
+  }
+
+  // Populates the browse/search filter datalist with tags already in use.
+  function setupTagDatalist() {
+    const list = document.getElementById('tag-options');
+    if (!list) return;
+    loadTags().then((tags) => {
+      tags.forEach((tag) => {
+        const option = document.createElement('option');
+        option.value = tag.name;
+        option.label = `${tag.name} · ${tag.uses} member${tag.uses === 1 ? '' : 's'}`;
+        list.appendChild(option);
+      });
+    });
+  }
+
   // ---------- Tag chip input ----------
   function setupTagInput() {
     const hidden = $('input[data-tags-input]');
@@ -123,6 +148,7 @@
     visible.id = 'tag-input';
     visible.placeholder = 'Add a tag and press Enter';
     visible.setAttribute('aria-label', 'Add interest');
+    visible.setAttribute('autocomplete', 'off');
     hidden.type = 'hidden';
     hidden.insertAdjacentElement('afterend', wrap);
 
@@ -131,9 +157,11 @@
       .map((t) => t.trim().toLowerCase().replace(/^#/, ''))
       .filter((t) => /^[a-z0-9_-]{2,24}$/.test(t));
 
+    let refreshSuggestions = () => {};
     const sync = () => {
       hidden.value = tags.join(', ');
       render();
+      refreshSuggestions();
     };
     const render = () => {
       wrap.querySelectorAll('.chip').forEach((c) => c.remove());
@@ -169,6 +197,50 @@
       }
     });
     visible.addEventListener('blur', () => { if (visible.value.trim()) { tryAdd(visible.value); visible.value = ''; } });
+
+    // Suggestions drawn from the tags other members already use, so the same
+    // tag gets reused instead of re-invented.
+    const suggestions = document.createElement('ul');
+    suggestions.className = 'tag-suggestions';
+    suggestions.hidden = true;
+    wrap.insertAdjacentElement('afterend', suggestions);
+
+    const renderSuggestions = (vocabulary) => {
+      const typed = visible.value.trim().toLowerCase().replace(/^#/, '');
+      const matches = vocabulary
+        .filter((tag) => !tags.includes(tag.name))
+        .filter((tag) => (typed ? tag.name.startsWith(typed) : true))
+        .slice(0, 8);
+      suggestions.textContent = '';
+      matches.forEach((tag) => {
+        const item = document.createElement('li');
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = `#${tag.name}`;
+        const uses = document.createElement('small');
+        uses.textContent = `${tag.uses}`;
+        button.appendChild(uses);
+        // mousedown, not click: blur would otherwise swallow the selection.
+        button.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          tryAdd(tag.name);
+          visible.value = '';
+          renderSuggestions(vocabulary);
+        });
+        item.appendChild(button);
+        suggestions.appendChild(item);
+      });
+      suggestions.hidden = matches.length === 0;
+    };
+
+    loadTags().then((vocabulary) => {
+      if (!vocabulary.length) return;
+      refreshSuggestions = () => renderSuggestions(vocabulary);
+      refreshSuggestions();
+      visible.addEventListener('input', refreshSuggestions);
+      visible.addEventListener('focus', refreshSuggestions);
+    });
+
     sync();
   }
 
@@ -308,17 +380,20 @@
     toast.className = 'toast ' + (notification.type || '');
     const icon = ICONS[notification.type] || '🔔';
     const title = TITLES[notification.type] || 'Notification';
-    const link = notification.link
-      ? `<a href="${notification.link}">View</a>`
-      : '';
     toast.innerHTML = `
-      <div class="t-icon">${icon}</div>
+      <div class="t-icon">${escapeHtml(icon)}</div>
       <div>
         <strong>${escapeHtml(title)}</strong>
         <small>${escapeHtml(notification.body || '')}</small>
-        ${link}
       </div>
     `;
+    // Built as a node with a same-origin-only href: never interpolated as HTML.
+    if (notification.link && /^\/[^/\\]/.test(notification.link)) {
+      const link = document.createElement('a');
+      link.href = notification.link;
+      link.textContent = 'View';
+      toast.lastElementChild.appendChild(link);
+    }
     host.appendChild(toast);
     setTimeout(() => {
       toast.classList.add('leaving');
