@@ -1,0 +1,17 @@
+<%- include('partials/head') %>
+<section class="panel narrow">
+  <div class="panel-header">
+    <div>
+      <h1>Resend verification email</h1>
+      <p>Enter the email address you used to create your account.</p>
+    </div>
+  </div>
+  <form method="post" action="/resend-verification" class="form">
+    <label>Email
+      <input name="email" type="email" value="<%= values && values.email || '' %>" autocomplete="email" required>
+    </label>
+    <button class="primary" type="submit">Send verification link</button>
+    <p style="color:var(--muted);"><a href="/login">Back to sign in</a></p>
+  </form>
+</section>
+<%- include('partials/foot') %>

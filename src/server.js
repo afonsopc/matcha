@@ -22,6 +22,7 @@ run('UPDATE users SET online = 0 WHERE online = 1');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
+app.set('trust proxy', 'loopback');
 const PORT = Number(process.env.PORT || 3000);
 const APP_URL = process.env.APP_URL || `http://localhost:${PORT}`;
 const MAIL_MODE = process.env.MAIL_MODE || 'console';
@@ -127,6 +128,7 @@ app.use(rateLimit({ windowMs: 60 * 1000, max: 240 }));
 // Generous on purpose: enough to stop scripted password guessing without ever
 // locking out an evaluator retrying a form by hand.
 const authLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 60, skipSuccessfulRequests: true });
+const verificationLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 5 });
 app.use(express.urlencoded({ extended: false, limit: '64kb' }));
 app.use(express.json({ limit: '64kb' }));
 app.use(sessionMiddleware);
@@ -451,6 +453,21 @@ app.get('/verify/:token', (req, res) => {
 });
 
 app.get('/login', (req, res) => res.render('login', { values: {} }));
+app.get('/resend-verification', (req, res) => res.render('resend-verification', { values: {} }));
+app.post('/resend-verification', verificationLimiter, (req, res) => {
+  const email = sanitizeText(req.body.email, 120).toLowerCase();
+  const user = get('SELECT id, email, first_name FROM users WHERE email = ? AND verified = 0', [email]);
+  if (user) {
+    const token = crypto.randomBytes(24).toString('hex');
+    run('UPDATE users SET verify_token = ? WHERE id = ?', [token, user.id]);
+    const verifyUrl = `${APP_URL}/verify/${token}`;
+    sendMail(user.email, 'Verify your Matcha account', `Hi ${user.first_name},\n\nActivate your Matcha account with this link:\n${verifyUrl}\n\nIf you did not create this account, ignore this message.`);
+  }
+  res.render('resend-verification', {
+    values: { email },
+    notice: 'If that address belongs to an unverified account, a new verification link was sent.'
+  });
+});
 app.post('/login', authLimiter, (req, res) => {
   const username = sanitizeText(req.body.username, 32);
   const values = { username };
