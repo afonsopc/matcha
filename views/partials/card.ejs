@@ -1,0 +1,18 @@
+<article class="card">
+  <a href="/users/<%= p.username %>">
+    <div class="card-photo">
+      <% if (p.profile_photo) { %>
+        <img src="/static/uploads/<%= p.profile_photo %>" alt="<%= p.first_name %>" loading="lazy">
+      <% } else { %>
+        <span class="no-photo">No photo yet</span>
+      <% } %>
+      <% if (p.online) { %><span class="online-pill">Online</span><% } %>
+    </div>
+    <div class="card-text">
+      <h2><%= p.first_name %><% if (p.age) { %><span>, <%= p.age %></span><% } %></h2>
+      <p><%= [p.breed, p.gender ? genderLabels[p.gender] : null].filter(Boolean).join(' · ') || 'Breed not given' %></p>
+      <p class="meta"><%= p.city || 'Unknown town' %><%= p.distance !== null ? ' · ' + formatDistance(p.distance) : '' %></p>
+      <p class="meta">Fame <%= p.fame %><% if (p.common_tags) { %> · <%= p.common_tags %> in common<% } %></p>
+    </div>
+  </a>
+</article>

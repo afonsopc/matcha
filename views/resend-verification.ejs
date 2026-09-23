@@ -1,17 +1,18 @@
-<%- include('partials/head') %>
-<section class="panel narrow">
-  <div class="panel-header">
-    <div>
-      <h1>Resend verification email</h1>
-      <p>Enter the email address you used to create your account.</p>
-    </div>
+<%- include('partials/head', { title: 'Resend confirmation' }) %>
+<section class="auth">
+  <div class="auth-form">
+    <h1>Resend confirmation</h1>
+    <p class="lede">Check your spam folder first. If it is not there, we will send a new link.</p>
+    <form method="post" action="/resend-verification" class="form">
+      <label>Email
+        <input name="email" type="email" value="<%= values && values.email || '' %>" autocomplete="email" required>
+      </label>
+      <button class="primary big" type="submit">Resend</button>
+    </form>
+    <ul class="auth-links"><li><a href="/login">Back to sign in</a></li></ul>
   </div>
-  <form method="post" action="/resend-verification" class="form">
-    <label>Email
-      <input name="email" type="email" value="<%= values && values.email || '' %>" autocomplete="email" required>
-    </label>
-    <button class="primary" type="submit">Send verification link</button>
-    <p style="color:var(--muted);"><a href="/login">Back to sign in</a></p>
-  </form>
+  <figure class="auth-photo">
+    <img src="/static/img/scenes/winter.jpg" alt="An Icelandic horse in a snowy field">
+  </figure>
 </section>
 <%- include('partials/foot') %>

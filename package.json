@@ -1,7 +1,7 @@
 {
   "name": "matcha",
   "version": "1.0.0",
-  "description": "42 Matcha dating web application",
+  "description": "Matcha, a dating app for horses (42 Matcha)",
   "main": "src/server.js",
   "engines": {
     "node": ">=20"
@@ -10,7 +10,8 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "seed": "node src/seed.js",
-    "check": "node --check src/server.js && node --check src/db.js && node --check src/seed.js && node --check src/mailer.js"
+    "check": "node --check src/server.js && node --check src/db.js && node --check src/seed.js && node --check src/mailer.js && node --check src/emails.js && node --check src/mail-test.js && node --check public/js/app.js",
+    "mail:test": "node src/mail-test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -22,7 +23,6 @@
     "express-session": "^1.18.1",
     "helmet": "^8.1.0",
     "multer": "^2.0.0",
-    "socket.io": "^4.8.1",
-    "validator": "^13.15.0"
+    "socket.io": "^4.8.1"
   }
 }

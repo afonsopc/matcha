@@ -15,11 +15,31 @@
     setupConfirmForms();
     setupSocket();
     setupAutoDismissFlash();
+    setupPhotoInput();
+    setupFilters();
   });
+
+  // Filters start folded on phones unless some are already applied.
+  function setupFilters() {
+    const box = $('[data-filters]');
+    if (box && !box.hasAttribute('data-active') && window.matchMedia('(max-width: 860px)').matches) box.open = false;
+  }
+
+  // ---------- Photo picker feedback ----------
+  function setupPhotoInput() {
+    const input = $('[data-photo-input]');
+    const hint = $('[data-photo-hint]');
+    if (!input || !hint) return;
+    const initial = hint.textContent;
+    input.addEventListener('change', () => {
+      const names = Array.from(input.files || []).map((f) => f.name);
+      hint.textContent = names.length ? `${names.length} selected: ${names.join(', ')}. Save to upload.` : initial;
+    });
+  }
 
   // ---------- Top-bar badges ----------
   function setupBadges() {
-    $$('[data-badge]').forEach(updateBadge);
+    $$('[data-badge]').forEach((el) => updateBadge(el));
   }
   function updateBadge(el, valueOverride) {
     const v = typeof valueOverride === 'number' ? valueOverride : Number(el.textContent || 0);
@@ -168,7 +188,7 @@
       tags.forEach((t) => {
         const chip = document.createElement('span');
         chip.className = 'chip';
-        chip.innerHTML = `#${t} <button type="button" aria-label="Remove ${t}">×</button>`;
+        chip.innerHTML = `#${t} <button type="button" aria-label="Remove ${t}"><svg class="ico"><use href="#i-close"/></svg></button>`;
         chip.querySelector('button').addEventListener('click', () => {
           tags = tags.filter((x) => x !== t);
           sync();
@@ -190,7 +210,9 @@
 
     visible.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ',' || e.key === ' ') {
-        if (visible.value.trim()) { e.preventDefault(); tryAdd(visible.value); visible.value = ''; }
+        // Enter here adds a tag; it must never submit the whole profile form.
+        if (e.key === 'Enter' || visible.value.trim()) e.preventDefault();
+        if (visible.value.trim()) { tryAdd(visible.value); visible.value = ''; }
       } else if (e.key === 'Backspace' && !visible.value && tags.length) {
         tags.pop();
         sync();
@@ -261,11 +283,25 @@
       btn.disabled = true;
       if (status) status.textContent = 'Locating';
       navigator.geolocation.getCurrentPosition((pos) => {
-        if (latInput) latInput.value = pos.coords.latitude.toFixed(5);
-        if (lngInput) lngInput.value = pos.coords.longitude.toFixed(5);
+        const lat = pos.coords.latitude.toFixed(5);
+        const lon = pos.coords.longitude.toFixed(5);
+        if (latInput) latInput.value = lat;
+        if (lngInput) lngInput.value = lon;
         if (consent && !consent.checked) consent.checked = true;
-        if (status) status.textContent = 'Coordinates filled in. Save the profile to store them.';
-        btn.disabled = false;
+        if (status) status.textContent = 'Finding your town…';
+        // The server turns the coordinates into a town and neighbourhood.
+        fetch(`/geo/reverse?lat=${lat}&lon=${lon}`, { headers: { Accept: 'application/json' } })
+          .then((r) => r.json().then((data) => ({ ok: r.ok, data })))
+          .then(({ ok, data }) => {
+            if (!ok) throw new Error(data.error || 'lookup failed');
+            const city = $('input[name="city"]');
+            const hood = $('input[name="neighborhood"]');
+            if (city) city.value = data.city || '';
+            if (hood) hood.value = data.neighborhood || '';
+            if (status) status.textContent = `Found ${[data.neighborhood, data.city].filter(Boolean).join(', ')}. Save the profile to keep it.`;
+          })
+          .catch(() => { if (status) status.textContent = 'Coordinates filled in, but the town could not be looked up. Type it in, then save.'; })
+          .finally(() => { btn.disabled = false; });
       }, (err) => {
         btn.disabled = false;
         if (status) status.textContent = `Could not get your position (${err.message}). Enter your city instead.`;
@@ -281,14 +317,32 @@
     scrollMessages();
 
     const form = messages.closest('.chat')?.querySelector('form.send');
-    if (form) {
-      const input = form.querySelector('input[name="body"]');
-      // Submit on Enter, blank-message guard
-      form.addEventListener('submit', (e) => {
-        if (!input.value.trim()) { e.preventDefault(); return; }
-      });
-      if (input) setTimeout(() => input.focus(), 80);
-    }
+    if (!form) return;
+    const input = form.querySelector('input[name="body"]');
+    const button = form.querySelector('button');
+    // Sent over fetch so the page never reloads: the server echoes the message
+    // back through the socket, which is what actually draws the bubble.
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const body = input.value.trim();
+      if (!body) return;
+      button.disabled = true;
+      fetch(form.action, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'fetch' },
+        body: new URLSearchParams({ body }).toString()
+      }).then((res) => {
+        if (res.ok) {
+          input.value = '';
+          // Without a live socket the echo never comes, so reload instead.
+          if (!liveSocket || !liveSocket.connected) window.location.reload();
+        } else {
+          return res.json().catch(() => ({})).then((data) => showToast({ type: 'unlike', body: data.error || 'Message not sent.' }));
+        }
+      }).catch(() => form.submit())
+        .finally(() => { button.disabled = false; input.focus(); });
+    });
+    setTimeout(() => input.focus(), 80);
   }
   function scrollMessages() {
     const messages = $('#messages');
@@ -301,14 +355,23 @@
     if (!active) return false;
     const involves = message.sender_id === Number(active) || message.receiver_id === Number(active);
     if (!involves) return false;
+    const placeholder = messages.querySelector('[data-chat-empty]');
+    if (placeholder) placeholder.remove();
     const bubble = document.createElement('p');
     bubble.className = 'bubble ' + (message.sender_id === currentUserId ? 'mine' : 'theirs');
-    bubble.textContent = message.body;
+    const text = document.createElement('span');
+    text.textContent = message.body;
     const small = document.createElement('small');
     small.textContent = formatTime(message.created_at);
-    bubble.appendChild(small);
+    bubble.append(text, small);
     messages.appendChild(bubble);
     scrollMessages();
+    if (message.sender_id !== currentUserId) {
+      fetch(`/chat/${message.sender_id}/read`, { method: 'POST', headers: { 'X-Requested-With': 'fetch' } })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => { if (data) setBadge('messages', data.unread); })
+        .catch(() => {});
+    }
     return true;
   }
   function decorateBubbleTimes(container) {
@@ -322,15 +385,22 @@
     const d = new Date(Number(unix) * 1000);
     const today = new Date();
     const sameDay = d.toDateString() === today.toDateString();
-    if (sameDay) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' · ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    if (sameDay) return time;
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' · ' + time;
   }
-  function formatRelative(unix) {
-    const seconds = Math.floor(Date.now() / 1000) - Number(unix);
-    if (seconds < 60) return 'just now';
-    if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)} h ago`;
-    return `${Math.floor(seconds / 86400)} d ago`;
+  // Keeps the conversation list preview in sync with live messages.
+  function updateChatRow(message, currentUserId) {
+    const otherId = message.sender_id === currentUserId ? message.receiver_id : message.sender_id;
+    const row = document.querySelector(`[data-chat-row="${otherId}"]`);
+    if (!row) return;
+    const preview = row.querySelector('.chat-preview');
+    if (preview) preview.textContent = message.body;
+    row.parentElement.insertBefore(row, row.parentElement.querySelector('.chat-row'));
+  }
+  function activeChatId() {
+    const messages = $('#messages');
+    return messages ? Number(messages.dataset.activeId) : null;
   }
 
   // ---------- Lightbox ----------
@@ -343,9 +413,9 @@
   function openLightbox(src) {
     const overlay = document.createElement('div');
     overlay.className = 'lightbox';
-    overlay.innerHTML = `<button aria-label="Close">×</button><img src="${src}" alt="">`;
+    overlay.innerHTML = `<button aria-label="Close"><svg class="ico"><use href="#i-close"/></svg></button><img src="${src}" alt="">`;
     const close = () => overlay.remove();
-    overlay.addEventListener('click', (e) => { if (e.target === overlay || e.target.tagName === 'BUTTON') close(); });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay || e.target.closest('button')) close(); });
     document.addEventListener('keydown', function onKey(e) {
       if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); }
     });
@@ -372,13 +442,15 @@
     }
     return host;
   }
-  const TITLES = { like: 'New like', match: 'New connection', message: 'New message', visit: 'Profile visit', unlike: 'Disconnected' };
+  const TITLES = { like: 'Somebody likes you', match: "It's a match", message: 'New message', visit: 'Profile visit', unlike: 'Heads up' };
+  const ICONS = { like: 'i-heart', match: 'i-heart', message: 'i-chat', visit: 'i-eye', unlike: 'i-split' };
   function showToast(notification) {
     const host = getToastHost();
     const toast = document.createElement('div');
     toast.className = 'toast ' + (notification.type || '');
     const title = TITLES[notification.type] || 'Notification';
     toast.innerHTML = `
+      <span class="t-ico"><svg class="ico"><use href="#${ICONS[notification.type] || 'i-bell'}"/></svg></span>
       <div>
         <strong>${escapeHtml(title)}</strong>
         <small>${escapeHtml(notification.body || '')}</small>
@@ -402,23 +474,24 @@
   }
 
   // ---------- Socket ----------
+  let liveSocket = null;
   function setupSocket() {
     if (typeof io === 'undefined') return;
     if (!document.body.dataset.userId) return;
     const currentUserId = Number(document.body.dataset.userId);
     const socket = io();
+    liveSocket = socket;
 
     socket.on('notification', (notification) => {
-      incBadge('notifications');
+      // The open conversation already shows the message, no need to shout.
+      if (notification.type === 'message' && notification.actor_id === activeChatId()) return;
       showToast(notification);
     });
     socket.on('unread-count', (count) => setBadge('notifications', count));
     socket.on('message', (message) => {
       const added = appendMessage(message, currentUserId);
-      // If we're not on the active conversation, bump the messages badge
-      if (!added && message.sender_id !== currentUserId) {
-        incBadge('messages');
-      }
+      updateChatRow(message, currentUserId);
+      if (!added && message.sender_id !== currentUserId) incBadge('messages');
     });
   }
 })();

@@ -1,38 +1,24 @@
-<%- include('partials/head') %>
-<section class="hero">
-  <div class="hero-copy">
-    <h1>Find people near you.</h1>
-    <p>Create a profile, browse the people who match what you are looking for, and chat with the ones who liked you back.</p>
+<%- include('partials/head', { title: 'Dating for horses', bodyClass: 'home' }) %>
+<section class="landing">
+  <div class="landing-copy">
+    <h1>Dating for horses.</h1>
+    <p class="offer">Meet horses near you who like what you like. When the like goes both ways, you can talk.</p>
     <div class="actions">
-      <a class="button primary" href="/register">Create an account</a>
-      <a class="button" href="/login">Sign in</a>
+      <a class="button primary big" href="/register">Create an account</a>
+      <a class="button big" href="/login">Sign in</a>
     </div>
+    <p class="field-note"><%= totals.horses %> horses in <%= totals.towns %> towns</p>
   </div>
-  <div class="hero-art" aria-hidden="true">
-    <div class="art-card art-back"></div>
-    <div class="art-card art-mid"></div>
-    <div class="art-card art-front">
-      <div class="art-photo"><span class="art-avatar"></span></div>
-      <div class="art-lines">
-        <span class="art-line long"></span>
-        <span class="art-line short"></span>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section class="feature-row">
-  <div class="feature">
-    <h3>Suggestions</h3>
-    <p>Profiles are ranked by distance, tags you have in common, and fame rating.</p>
-  </div>
-  <div class="feature">
-    <h3>Chat</h3>
-    <p>A conversation opens once both of you have liked each other.</p>
-  </div>
-  <div class="feature">
-    <h3>Controls</h3>
-    <p>Block or report anyone, remove a like, and see who visited your profile.</p>
+  <div class="landing-grid">
+    <% sample.forEach(h => { %>
+      <figure class="card">
+        <div class="card-photo"><img src="/static/uploads/<%= h.profile_photo %>" alt="<%= h.first_name %>"></div>
+        <figcaption class="card-text">
+          <h2><%= h.first_name %><% if (h.age) { %><span>, <%= h.age %></span><% } %></h2>
+          <p><%= [h.breed, h.city].filter(Boolean).join(' · ') %></p>
+        </figcaption>
+      </figure>
+    <% }) %>
   </div>
 </section>
 <%- include('partials/foot') %>

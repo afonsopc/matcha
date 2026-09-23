@@ -1,70 +1,27 @@
-<%- include('partials/head') %>
-<section class="panel">
-  <div class="panel-header">
-    <div>
-      <h1 style="margin:0;">Search</h1>
-      <p>Combine age, fame rating, location and tags</p>
-    </div>
-    <% if (profiles !== null) { %>
-      <p class="hint"><%= profiles.length %> result<%= profiles.length === 1 ? '' : 's' %></p>
-    <% } %>
+<%- include('partials/head', { title: 'Search' }) %>
+<header class="page-head">
+  <div>
+    <h1>Search</h1>
+    <p class="lede">Filter by age, fame, place and interests.</p>
   </div>
-  <form method="get" class="filters">
-    <label>Min age <input name="minAge" type="number" min="18" max="120" placeholder="18" value="<%= query.minAge || '' %>"></label>
-    <label>Max age <input name="maxAge" type="number" min="18" max="120" placeholder="99" value="<%= query.maxAge || '' %>"></label>
-    <label>Min fame <input name="minFame" type="number" min="0" max="100" placeholder="0" value="<%= query.minFame || '' %>"></label>
-    <label>Max fame <input name="maxFame" type="number" min="0" max="100" placeholder="100" value="<%= query.maxFame || '' %>"></label>
-    <label>Location <input name="location" placeholder="City or neighborhood" value="<%= query.location || '' %>"></label>
-    <label>Tags <input name="tag" placeholder="e.g. coffee, hiking" value="<%= [].concat(query.tag || '').join(', ') %>" list="tag-options"></label>
-    <label>Sort by
-      <select name="sort">
-        <% [['','Best match'],['age','Age'],['location','Location'],['fame','Fame'],['tags','Common tags']].forEach(([v,l]) => { %>
-          <option value="<%= v %>" <%= (query.sort || '') === v ? 'selected' : '' %>><%= l %></option>
-        <% }) %>
-      </select>
-    </label>
-    <div class="row-actions">
-      <a class="button ghost small" href="/search">Clear filters</a>
-      <button class="primary" type="submit">Search</button>
-    </div>
-  </form>
-  <datalist id="tag-options"></datalist>
-</section>
+  <% if (profiles !== null) { %><p class="count"><%= profiles.length %> <%= profiles.length === 1 ? 'result' : 'results' %></p><% } %>
+</header>
+
+<%- include('partials/filters', { submitLabel: 'Search' }) %>
 
 <% if (profiles === null) { %>
-  <section class="empty" style="margin-top:18px;">
-    Set at least one filter above, or open the <a href="/browse">suggestions</a>.
+  <section class="empty">
+    <h2>Nothing searched yet</h2>
+    <p>Set a filter above, or go back to your <a href="/browse">suggestions</a>.</p>
   </section>
 <% } else if (!profiles.length) { %>
-  <section class="empty" style="margin-top:18px;">
-    <strong>No results.</strong>
-    Widen the age or fame range, or remove a tag.
-  </section>
+  <section class="empty">
+      <h2>No results</h2>
+      <p>Try a wider age or fame range, another place, or fewer interests.</p>
+    </section>
 <% } else { %>
   <section class="cards">
-    <% profiles.forEach(p => { %>
-      <article class="card">
-        <a href="/users/<%= p.username %>">
-          <div class="media">
-            <% if (p.profile_photo) { %>
-              <img src="/static/uploads/<%= p.profile_photo %>" alt="">
-            <% } else { %>
-              <div class="placeholder">No photo</div>
-            <% } %>
-            <div class="card-overlay">
-              <h2><%= p.first_name %><%= p.age ? ', ' + p.age : '' %></h2>
-              <p><span class="online-dot <%= p.online ? 'live' : '' %>"></span><%= p.city || 'Unknown city' %><%= p.distance !== null ? ' · ' + formatDistance(p.distance) : '' %></p>
-            </div>
-          </div>
-          <div class="card-body">
-            <p>
-              <span class="fame-pill">Fame <%= p.fame %></span>
-              <% if (p.common_tags) { %><span class="tag-mini"><%= p.common_tags %> shared tag<%= p.common_tags === 1 ? '' : 's' %></span><% } %>
-            </p>
-          </div>
-        </a>
-      </article>
-    <% }) %>
+    <% profiles.forEach(p => { %><%- include('partials/card', { p }) %><% }) %>
   </section>
 <% } %>
 <%- include('partials/foot') %>

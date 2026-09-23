@@ -1,18 +1,19 @@
-<%- include('partials/head') %>
-<section class="panel narrow">
-  <div class="panel-header">
-    <div>
-      <h1>Choose a new password</h1>
-      <p>The link is valid for one hour and can only be used once.</p>
-    </div>
+<%- include('partials/head', { title: 'New password' }) %>
+<section class="auth">
+  <div class="auth-form">
+    <h1>New password</h1>
+    <p class="lede">This link works once and expires after an hour.</p>
+    <form method="post" action="/reset/<%= token %>" class="form">
+      <label>New password
+        <span class="pw-wrapper">
+          <input name="password" type="password" autocomplete="new-password" required data-password="meter">
+        </span>
+      </label>
+      <button class="primary big" type="submit">Save password</button>
+    </form>
   </div>
-  <form method="post" action="/reset/<%= token %>" class="form">
-    <label>New password
-      <span class="pw-wrapper">
-        <input name="password" type="password" autocomplete="new-password" required data-password="meter">
-      </span>
-    </label>
-    <button class="primary" type="submit">Update password</button>
-  </form>
+  <figure class="auth-photo">
+    <img src="/static/img/scenes/portrait.jpg" alt="Close-up of a chestnut horse with a long blond mane">
+  </figure>
 </section>
 <%- include('partials/foot') %>

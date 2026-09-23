@@ -1,35 +1,37 @@
-<%- include('partials/head') %>
-<section class="panel narrow">
-  <div class="panel-header">
-    <div>
-      <h1>Create your account</h1>
-      <p>You will get an email with a link to activate the account.</p>
-    </div>
+<%- include('partials/head', { title: 'Join' }) %>
+<section class="auth">
+  <div class="auth-form">
+    <h1>Create an account</h1>
+    <p class="lede">We will email you a link to confirm your address.</p>
+    <form method="post" action="/register" class="form" autocomplete="on" novalidate>
+      <div class="row">
+        <label>Name
+          <input name="first_name" value="<%= values.first_name || '' %>" autocomplete="given-name" placeholder="Biscuit" required>
+        </label>
+        <label>Stable name
+          <input name="last_name" value="<%= values.last_name || '' %>" autocomplete="family-name" placeholder="Hayward" required>
+        </label>
+      </div>
+      <label>Email
+        <input name="email" type="email" value="<%= values.email || '' %>" autocomplete="email" placeholder="you@example.com" required>
+      </label>
+      <label>Username
+        <span class="hint">3 to 32 letters, digits or underscores.</span>
+        <input name="username" pattern="[A-Za-z0-9_]{3,32}" value="<%= values.username || '' %>" autocomplete="username" required>
+      </label>
+      <label>Password
+        <span class="pw-wrapper">
+          <input name="password" type="password" autocomplete="new-password" required data-password="meter">
+        </span>
+      </label>
+      <button class="primary big" type="submit">Create account</button>
+    </form>
+    <ul class="auth-links">
+      <li>Already in? <a href="/login">Sign in</a></li>
+    </ul>
   </div>
-  <form method="post" action="/register" class="form" autocomplete="on" novalidate>
-    <div class="row">
-      <label>First name
-        <input name="first_name" value="<%= values.first_name || '' %>" autocomplete="given-name" required>
-      </label>
-      <label>Last name
-        <input name="last_name" value="<%= values.last_name || '' %>" autocomplete="family-name" required>
-      </label>
-    </div>
-    <label>Email
-      <input name="email" type="email" value="<%= values.email || '' %>" autocomplete="email" placeholder="you@example.com" required>
-    </label>
-    <label>Username
-      <span class="hint">3–32 characters. Letters, digits, underscore.</span>
-      <input name="username" pattern="[A-Za-z0-9_]{3,32}" value="<%= values.username || '' %>" autocomplete="username" required>
-    </label>
-    <label>Password
-      <span class="hint">Mix cases, add a digit and a symbol. Avoid common words.</span>
-      <span class="pw-wrapper">
-        <input name="password" type="password" autocomplete="new-password" required data-password="meter" placeholder="Choose a strong password">
-      </span>
-    </label>
-    <button class="primary" type="submit">Create account</button>
-    <p>Already have one? <a href="/login">Sign in instead.</a></p>
-  </form>
+  <figure class="auth-photo">
+    <img src="/static/img/scenes/sunrise.jpg" alt="Two New Forest ponies walking through mist at sunrise">
+  </figure>
 </section>
 <%- include('partials/foot') %>

@@ -1,0 +1,37 @@
+<% const active = ['minAge','maxAge','minFame','maxFame','location','tag','minCommon','sort'].some((k) => query[k] && String(query[k]).length); %>
+<details class="filters-box" data-filters<%= active ? ' data-active' : '' %> open>
+<summary>Filters<% if (active) { %> <span class="badge">on</span><% } %></summary>
+<form method="get" class="filters">
+  <fieldset>
+    <legend>Age</legend>
+    <div class="pair">
+      <input name="minAge" type="number" min="18" max="120" placeholder="18" value="<%= query.minAge || '' %>" aria-label="Minimum age">
+      <span>to</span>
+      <input name="maxAge" type="number" min="18" max="120" placeholder="99" value="<%= query.maxAge || '' %>" aria-label="Maximum age">
+    </div>
+  </fieldset>
+  <fieldset>
+    <legend>Fame</legend>
+    <div class="pair">
+      <input name="minFame" type="number" min="0" max="100" placeholder="0" value="<%= query.minFame || '' %>" aria-label="Minimum fame">
+      <span>to</span>
+      <input name="maxFame" type="number" min="0" max="100" placeholder="100" value="<%= query.maxFame || '' %>" aria-label="Maximum fame">
+    </div>
+  </fieldset>
+  <label>Where <input name="location" placeholder="Golegã, Porto…" value="<%= query.location || '' %>"></label>
+  <label>Interests <input name="tag" placeholder="carrots, dressage" value="<%= [].concat(query.tag || '').join(', ') %>" list="tag-options"></label>
+  <label>Min. in common <input name="minCommon" type="number" min="0" max="15" placeholder="0" value="<%= query.minCommon || '' %>"></label>
+  <label>Sort by
+    <select name="sort">
+      <% [['','Best match'],['location','Closest first'],['age','Youngest first'],['fame','Most famous'],['tags','Most in common']].forEach(([v,l]) => { %>
+        <option value="<%= v %>" <%= (query.sort || '') === v ? 'selected' : '' %>><%= l %></option>
+      <% }) %>
+    </select>
+  </label>
+  <div class="filter-actions">
+    <button class="primary" type="submit"><%= submitLabel %></button>
+    <% if (active) { %><a class="button ghost" href="<%= currentPath %>">Reset</a><% } %>
+  </div>
+  <datalist id="tag-options"></datalist>
+</form>
+</details>

@@ -1,9 +1,12 @@
-<%- include('partials/head') %>
-<section class="panel narrow" style="text-align:center;">
-  <h1 style="margin-top:8px;"><%= message %></h1>
-  <div class="actions" style="justify-content:center;">
-    <a class="button primary" href="<%= user ? '/browse' : '/' %>">Go back</a>
-    <% if (user) { %><a class="button" href="/profile">Profile</a><% } %>
+<%- include('partials/head', { title: 'Error' }) %>
+<section class="oops">
+  <img src="/static/img/scenes/laughing.jpg" alt="A grey horse with its head up and lips curled, looking like it is laughing">
+  <div>
+    <h1><%= message %></h1>
+        <div class="actions">
+      <a class="button primary" href="<%= user ? '/browse' : '/' %>"><%= user ? 'Back to suggestions' : 'Home' %></a>
+      <% if (user) { %><a class="button" href="/profile">My profile</a><% } %>
+    </div>
   </div>
 </section>
 <%- include('partials/foot') %>

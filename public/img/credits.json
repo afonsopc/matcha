@@ -1,0 +1,399 @@
+{
+ "horses": [
+  {
+   "slug": "akhal-teke",
+   "breed": "Akhal-Teke",
+   "author": "Artur Baboev - give free of charge right for promouting of Akhal-teke article on Wikipedia",
+   "license": "CC BY-SA 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Dagat-Geli.jpg"
+  },
+  {
+   "slug": "american-paint-horse",
+   "breed": "American Paint Horse",
+   "author": "Unknown",
+   "license": "CC BY 2.5",
+   "source": "https://commons.wikimedia.org/wiki/File:Paint_Horse_REFON.jpg"
+  },
+  {
+   "slug": "american-quarter-horse",
+   "breed": "American Quarter Horse",
+   "author": "Rumo",
+   "license": "CC BY-SA 2.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Roan.jpg"
+  },
+  {
+   "slug": "andalusian-horse",
+   "breed": "Andalusian",
+   "author": "Just chaos",
+   "license": "CC BY 2.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Andalusian.jpg"
+  },
+  {
+   "slug": "appaloosa",
+   "breed": "Appaloosa",
+   "author": "Darrell Dodds (license held by Appaloosas)",
+   "license": "CC BY-SA 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:THIEL_619.jpg"
+  },
+  {
+   "slug": "arabian-horse",
+   "breed": "Arabian",
+   "author": "Ealdgyth",
+   "license": "CC BY-SA 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Halterstandingshotarabianone.jpg"
+  },
+  {
+   "slug": "camargue-horse",
+   "breed": "Camargue",
+   "author": "Bernard DUPONT from FRANCE",
+   "license": "CC BY-SA 2.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Camargue_Horse_%2826645657776%29.jpg"
+  },
+  {
+   "slug": "clydesdale-horse",
+   "breed": "Clydesdale",
+   "author": "Bonnie U. Gruenberg",
+   "license": "CC BY-SA 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Clydesdale_horse_by_Bonnie_Gruenberg.JPG"
+  },
+  {
+   "slug": "connemara-pony",
+   "breed": "Connemara pony",
+   "author": "Satu Pitkänen",
+   "license": "CC BY-SA 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Connemara_mare.jpg"
+  },
+  {
+   "slug": "criollo-horse",
+   "breed": "Criollo",
+   "author": "Luciodec",
+   "license": "CC BY 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Yeguacriolla.jpg"
+  },
+  {
+   "slug": "dartmoor-pony",
+   "breed": "Dartmoor pony",
+   "author": "DFoidl",
+   "license": "CC BY-SA 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Dartmoorpony.JPG"
+  },
+  {
+   "slug": "dutch-warmblood",
+   "breed": "Dutch Warmblood",
+   "author": "Remy Overkempe",
+   "license": "CC BY-SA 2.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Ubility.jpg"
+  },
+  {
+   "slug": "exmoor-pony",
+   "breed": "Exmoor pony",
+   "author": "Wsupermain2",
+   "license": "CC BY-SA 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Exmoor_PonyWindswept.jpg"
+  },
+  {
+   "slug": "falabella",
+   "breed": "Falabella",
+   "author": "Captain E H Eckholdt",
+   "license": "Attribution",
+   "source": "https://commons.wikimedia.org/wiki/File:FalabellaFestivo.jpg"
+  },
+  {
+   "slug": "fjord-horse",
+   "breed": "Fjord",
+   "author": "Plasma at French Wikipedia",
+   "license": "Public domain",
+   "source": "https://commons.wikimedia.org/wiki/File:Cheval_fjord_00003.jpg"
+  },
+  {
+   "slug": "friesian-horse",
+   "breed": "Friesian",
+   "author": "Larissa Allen",
+   "license": "CC BY-SA 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Friesian_Horse_Side_View_3.jpg"
+  },
+  {
+   "slug": "garrano",
+   "breed": "Garrano",
+   "author": "Norberto Esteves",
+   "license": "CC BY-SA 4.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Garranos_fight.jpg"
+  },
+  {
+   "slug": "gypsy-horse",
+   "breed": "Gypsy",
+   "author": "Mary E. Graybeal",
+   "license": "Public domain",
+   "source": "https://commons.wikimedia.org/wiki/File:GypsyMareLeft.jpg"
+  },
+  {
+   "slug": "haflinger",
+   "breed": "Haflinger",
+   "author": "Matthias Walther",
+   "license": "CC BY-SA 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Haflinger_Westfalensonne_und_Almfee.JPG"
+  },
+  {
+   "slug": "hanoverian-horse",
+   "breed": "Hanoverian",
+   "author": "Craig Maccubbin",
+   "license": "CC BY 2.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Lantinus_and_Lynch.jpg"
+  },
+  {
+   "slug": "icelandic-horse",
+   "breed": "Icelandic",
+   "author": "Dagur Brynjólfsson",
+   "license": "CC BY-SA 2.0",
+   "source": "https://commons.wikimedia.org/wiki/File:043_S%C3%A6var_fr%C3%A1_Stangarholti.jpg"
+  },
+  {
+   "slug": "knabstrupper",
+   "breed": "Knabstrupper",
+   "author": "Melyni at English Wikipedia",
+   "license": "CC BY-SA 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Danish_Knabstrupper_-_Xantos.jpg"
+  },
+  {
+   "slug": "lusitano",
+   "breed": "Lusitano",
+   "author": "Lbpetersen",
+   "license": "CC BY-SA 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Lusitano_stallion1.jpg"
+  },
+  {
+   "slug": "mangalarga-marchador",
+   "breed": "Mangalarga Marchador",
+   "author": "Fábio Vidigal",
+   "license": "CC BY-SA 2.5",
+   "source": "https://commons.wikimedia.org/wiki/File:Mangalarga_Marchador.jpg"
+  },
+  {
+   "slug": "marwari-horse",
+   "breed": "Marwari",
+   "author": "Virendra.kankariya",
+   "license": "Public domain",
+   "source": "https://commons.wikimedia.org/wiki/File:Humayun%2C_Marwari_Stallion_of_Virendra_Kankariya.jpg"
+  },
+  {
+   "slug": "morgan-horse",
+   "breed": "Morgan",
+   "author": "Photo: Anthony Domire JR.",
+   "license": "CC BY 2.0",
+   "source": "https://commons.wikimedia.org/wiki/File:ChestnutSilver.jpg"
+  },
+  {
+   "slug": "mustang",
+   "breed": "Mustang",
+   "author": "Ealdgyth",
+   "license": "CC BY-SA 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Mustanggelding.jpg"
+  },
+  {
+   "slug": "paso-fino",
+   "breed": "Paso Fino",
+   "author": "Arsdelicata",
+   "license": "CC BY-SA 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Puerto_rican-Paso-Fino-Horse-chestnut.jpg"
+  },
+  {
+   "slug": "percheron",
+   "breed": "Percheron",
+   "author": "Eponimm",
+   "license": "CC BY-SA 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Cheval-percheron-gris_SDA2014_%28cropped%29.jpg"
+  },
+  {
+   "slug": "shetland-pony",
+   "breed": "Shetland pony",
+   "author": "Own work",
+   "license": "CC BY-SA 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:289-o-Galant-SWE-71-SH-03.jpg"
+  },
+  {
+   "slug": "shire-horse",
+   "breed": "Shire",
+   "author": "Anthony Appleyard at English Wikipedia",
+   "license": "CC BY-SA 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Aa_shirehorse.jpg"
+  },
+  {
+   "slug": "sorraia",
+   "breed": "Sorraia",
+   "author": "Selona",
+   "license": "CC BY 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Altamiro%2C_Purebred_Sorraia_Stallion.jpg"
+  },
+  {
+   "slug": "standardbred",
+   "breed": "Standardbred",
+   "author": "Izzypie Isabella Marks, AU",
+   "license": "CC BY 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Standardbred_Hunter.jpg"
+  },
+  {
+   "slug": "tennessee-walking-horse",
+   "breed": "Tennessee Walking Horse",
+   "author": "Just chaos",
+   "license": "CC BY 2.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Tennessee_Walking_Horse2.jpg"
+  },
+  {
+   "slug": "trakehner",
+   "breed": "Trakehner",
+   "author": "Лена",
+   "license": "Public domain",
+   "source": "https://commons.wikimedia.org/wiki/File:Traken.jpg"
+  },
+  {
+   "slug": "welsh-pony-and-cob",
+   "breed": "Welsh Pony and Cob",
+   "author": "Hanna V",
+   "license": "CC BY-SA 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Welshb_shangri-la.JPG"
+  },
+  {
+   "slug": "barb-horse",
+   "breed": "Barb",
+   "author": "Tsaag Valren",
+   "license": "CC BY-SA 4.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Barbe_bai_fantasia.jpg"
+  },
+  {
+   "slug": "holsteiner",
+   "breed": "Holsteiner",
+   "author": "Unknown",
+   "license": "CC BY-SA 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Holsteiner_Apfelschimmel-2005.jpg"
+  },
+  {
+   "slug": "irish-draught",
+   "breed": "Irish Draught",
+   "author": "Wasechun tashunka",
+   "license": "CC BY-SA 4.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Irish_Draught_2017_%28cropped%29.jpg"
+  },
+  {
+   "slug": "kladruber",
+   "breed": "Kladruber",
+   "author": "User:Hü",
+   "license": "Public domain",
+   "source": "https://commons.wikimedia.org/wiki/File:Kladruber.jpg"
+  },
+  {
+   "slug": "konik",
+   "breed": "Konik",
+   "author": "Alethe",
+   "license": "CC BY-SA 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Equus_ferus_caballus_%28conic%29_pony.jpg"
+  },
+  {
+   "slug": "missouri-fox-trotter",
+   "breed": "Missouri Fox Trotter",
+   "author": "Kayla Oakes",
+   "license": "CC BY-SA 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Quick_Trigger_Missouri_Fox_Trotter.jpeg"
+  },
+  {
+   "slug": "mongolian-horse",
+   "breed": "Mongolian",
+   "author": "Marcin Konsek",
+   "license": "CC BY-SA 4.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Ko%C5%84_mongolski_w_Parku_Narodowym_Gorchi-Tereld%C5%BC_10.JPG"
+  },
+  {
+   "slug": "pottok",
+   "breed": "Pottok",
+   "author": "Lankide Gorritxiki",
+   "license": "CC BY-SA 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Pootok_arra_Orbelaunen.JPG"
+  },
+  {
+   "slug": "przewalski-s-horse",
+   "breed": "Przewalski's",
+   "author": "Claudia Feh",
+   "license": "CC BY-SA 4.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Przewalskis_horse_02.jpg"
+  },
+  {
+   "slug": "selle-fran-ais",
+   "breed": "Selle Français",
+   "author": "The original uploader was Karlyne at French Wikipedia.",
+   "license": "CC BY-SA 2.5",
+   "source": "https://commons.wikimedia.org/wiki/File:Cheval_selle.JPG"
+  },
+  {
+   "slug": "ardennais",
+   "breed": "Ardennes",
+   "author": "Vassil",
+   "license": "Public domain",
+   "source": "https://commons.wikimedia.org/wiki/File:Etalon_race_ardennaise_1.jpg"
+  },
+  {
+   "slug": "comtois",
+   "breed": "Comtois",
+   "author": "Arnaud 25",
+   "license": "Public domain",
+   "source": "https://commons.wikimedia.org/wiki/File:Cheval_Comtois_2.jpg"
+  },
+  {
+   "slug": "frederiksborger",
+   "breed": "Frederiksborg",
+   "author": "Pia Gaarslev (uploaded by Ane Jensen) from Denmark",
+   "license": "CC BY 2.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Frederiksborghest.jpg"
+  },
+  {
+   "slug": "noriker",
+   "breed": "Noriker",
+   "author": "Karl Gruber",
+   "license": "CC BY 3.0 at",
+   "source": "https://commons.wikimedia.org/wiki/File:Noriker_horse_in_Salzburg_%28state%29_3336.jpg"
+  },
+  {
+   "slug": "oldenburger",
+   "breed": "Oldenburg",
+   "author": "Martin Bahmann",
+   "license": "CC BY-SA 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Bess2.jpg"
+  }
+ ],
+ "scenes": [
+  {
+   "slug": "sunrise",
+   "author": "Joana Kruse joanaimages.com",
+   "license": "CC BY-SA 4.0",
+   "source": "https://commons.wikimedia.org/wiki/File:NewForestPonies_sunrise.jpg"
+  },
+  {
+   "slug": "laughing",
+   "author": "Waugsberg",
+   "license": "CC BY-SA 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Flehmendes_Pferd_32_c.jpg"
+  },
+  {
+   "slug": "portrait",
+   "author": "Basotxerri",
+   "license": "CC BY-SA 4.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Galt%C3%BCr_-_Pferdekopf_01.jpg"
+  },
+  {
+   "slug": "garranos",
+   "author": "Norberto Esteves",
+   "license": "CC BY-SA 4.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Garranos_fight.jpg"
+  },
+  {
+   "slug": "winter",
+   "author": "Andreas Tille",
+   "license": "CC BY-SA 3.0",
+   "source": "https://commons.wikimedia.org/wiki/File:IcelandicHorseInWinter.jpg"
+  },
+  {
+   "slug": "camargue",
+   "author": "Benjamin Smith",
+   "license": "CC BY-SA 4.0",
+   "source": "https://commons.wikimedia.org/wiki/File:Saint-Laurent-d%27Aigouze_-_Camargue_horses_-_04.jpg"
+  }
+ ]
+}

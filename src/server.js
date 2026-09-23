@@ -1,8 +1,8 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const crypto = require('crypto');
 const fs = require('fs');
-const path = require('path');
 const http = require('http');
 const bcrypt = require('bcryptjs');
 const express = require('express');
@@ -11,9 +11,10 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const multer = require('multer');
 const { Server } = require('socket.io');
-const validator = require('validator');
+const { reverseGeocode, forwardGeocode } = require('./geo');
 const { migrate, all, get, run, transaction } = require('./db');
 const { createMailer } = require('./mailer');
+const { verifyEmail, resetEmail } = require('./emails');
 
 migrate();
 // Presence lives in memory, so a restart must not leave stale "online now" flags.
@@ -25,9 +26,10 @@ const io = new Server(server);
 app.set('trust proxy', 'loopback');
 const PORT = Number(process.env.PORT || 3000);
 const APP_URL = process.env.APP_URL || `http://localhost:${PORT}`;
-const MAIL_MODE = process.env.MAIL_MODE || 'console';
 const sendMail = createMailer(process.env);
-const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+const credits = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'public', 'img', 'credits.json'), 'utf8'));
+const publicDir = path.join(__dirname, '..', 'public');
+const uploadDir = path.join(publicDir, 'uploads');
 fs.mkdirSync(uploadDir, { recursive: true });
 
 const PLACEHOLDER_SECRETS = new Set(['', 'change-this-local-secret', 'replace-with-a-random-64-hex-string']);
@@ -117,7 +119,7 @@ app.use(helmet({
   },
   crossOriginResourcePolicy: { policy: 'same-origin' }
 }));
-app.use('/static', express.static(path.join(process.cwd(), 'public'), {
+app.use('/static', express.static(publicDir, {
   setHeaders: (res, filePath) => {
     // Uploads are user content: never let a browser render one as a document.
     if (filePath.includes(`${path.sep}uploads${path.sep}`)) res.setHeader('Content-Disposition', 'inline');
@@ -148,12 +150,28 @@ const weakPasswordWords = new Set([
   'butter', 'coffee', 'cheese', 'orange', 'purple', 'yellow', 'matrix',
   'starwars', 'star', 'force', 'ninja', 'pirate', 'wizard', 'secret',
   'access', 'mustang', 'ferrari', 'porsche', 'mercedes', 'bmw', 'audi',
+  'horse', 'pony', 'stallion', 'stable', 'saddle', 'carrot',
 ]);
 
-// Strip all non-alpha characters and check if the resulting base word is common.
-// This catches variants like Apple12345!, P@ssw0rd, Sunshine99!, strawberry5# etc.
+// About 42,000 common words from English, French, Portuguese, Spanish,
+// Italian and German (the 10,000 most frequent of each), so a password that
+// is just a dictionary word is refused whatever the language.
+const commonWords = new Set(fs.readFileSync(path.join(__dirname, 'common-words.txt'), 'utf8').split('\n').filter(Boolean));
+const LEET = { 0: 'o', 1: 'i', 3: 'e', 4: 'a', 5: 's', 7: 't', '@': 'a', '$': 's' };
+
+function isEmail(value) {
+  return value.length <= 254 && /^[^\s@<>()[\],;:"]+@[^\s@<>()[\],;:"]+\.[a-z]{2,}$/i.test(value);
+}
+
+// A password is weak when, once digits, symbols and accents are peeled off,
+// what is left is a single common word: Cavalo2024!, Bonjour99#, P@ssw0rd.
 function isWeakPassword(password) {
-  const base = password.toLowerCase().replace(/[^a-z]/g, '');
+  const lower = password.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const base = lower.replace(/[^a-z]/g, '');
+  const core = lower.replace(/^[^a-z]+|[^a-z]+$/g, '');
+  const unleet = core.replace(/[013457@$]/g, (c) => LEET[c]).replace(/[^a-z]/g, '');
+  if (base.length >= 4 && commonWords.has(base)) return true;
+  if (unleet.length >= 4 && commonWords.has(unleet)) return true;
   if (weakPasswordWords.has(base)) return true;
   for (const word of weakPasswordWords) {
     if (base === word || base.startsWith(word) || base.endsWith(word)) return true;
@@ -161,16 +179,29 @@ function isWeakPassword(password) {
   return false;
 }
 
+// Only real calendar dates written YYYY-MM-DD: "2001-02-31" is refused
+// instead of silently becoming March 3rd.
+function parseBirthdate(value) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+  if (!m) return null;
+  const date = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  return date.getUTCFullYear() === +m[1] && date.getUTCMonth() === +m[2] - 1 && date.getUTCDate() === +m[3] ? date : null;
+}
+
 function ageFromBirthdate(birthdate) {
-  if (!birthdate) return null;
-  const born = new Date(birthdate);
-  if (Number.isNaN(born.getTime())) return null;
+  const born = parseBirthdate(birthdate);
+  if (!born) return null;
   const now = new Date();
-  let age = now.getFullYear() - born.getFullYear();
-  const monthDelta = now.getMonth() - born.getMonth();
-  if (monthDelta < 0 || (monthDelta === 0 && now.getDate() < born.getDate())) age -= 1;
+  let age = now.getUTCFullYear() - born.getUTCFullYear();
+  const monthDelta = now.getUTCMonth() - born.getUTCMonth();
+  if (monthDelta < 0 || (monthDelta === 0 && now.getUTCDate() < born.getUTCDate())) age -= 1;
   return age;
 }
+
+// The database keeps the generic values the matching logic uses; the UI
+// speaks horse.
+const GENDER_LABELS = { man: 'Stallion', woman: 'Mare', other: 'Other' };
+const PREFERENCE_LABELS = { men: 'Stallions', women: 'Mares', bisexual: 'Everyone' };
 
 function sanitizeText(value, max = 500) {
   return String(value || '').trim().slice(0, max);
@@ -189,7 +220,7 @@ function passwordIssues(password) {
   if (!/[A-Z]/.test(pw)) issues.push('an uppercase letter');
   if (!/\d/.test(pw)) issues.push('a digit');
   if (!/[^A-Za-z0-9]/.test(pw)) issues.push('a symbol');
-  if (isWeakPassword(pw)) issues.push('something less common');
+  if (isWeakPassword(pw)) issues.push('to be more than a common word with numbers or symbols added');
   return issues;
 }
 
@@ -204,6 +235,12 @@ function userError(message, status = 400) {
   err.userFacing = true;
   err.status = status;
   return err;
+}
+
+function boundedInt(value, min, max) {
+  if (value === undefined || value === null || String(value).trim() === '') return null;
+  const n = Math.round(Number(value));
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : null;
 }
 
 function positiveId(value) {
@@ -241,7 +278,7 @@ function notify(userId, actorId, type, body, link) {
   const info = run('INSERT INTO notifications (user_id, actor_id, type, body, link) VALUES (?, ?, ?, ?, ?)', [userId, actorId || null, type, body, link || null]);
   const notification = get(`SELECT n.*, u.username AS actor_username FROM notifications n LEFT JOIN users u ON u.id = n.actor_id WHERE n.id = ?`, [info.lastInsertRowid]);
   io.to(`user:${userId}`).emit('notification', notification);
-  const unreadCount = get('SELECT COUNT(*) AS c FROM notifications WHERE user_id = ? AND read_at IS NULL', [userId]).c;
+  const unreadCount = unreadNotifications(userId);
   io.to(`user:${userId}`).emit('unread-count', unreadCount);
 }
 
@@ -307,6 +344,28 @@ function lastSeenText(user) {
   return `last seen on ${stamp}`;
 }
 
+// Friendlier wording for profile pages, still carrying the exact date and
+// time of the last connection as the subject requires.
+function lastSeenShort(user) {
+  if (!user) return '';
+  if (user.online) return 'Online now';
+  if (!user.last_seen) return 'Never connected';
+  const seconds = Math.floor(Date.now() / 1000) - Number(user.last_seen);
+  const plural = (n, unit) => `${n} ${unit}${n === 1 ? '' : 's'} ago`;
+  const stamp = formatDateTime(user.last_seen);
+  if (seconds < 60) return `Last seen just now · ${stamp}`;
+  if (seconds < 3600) return `Last seen ${plural(Math.floor(seconds / 60), 'minute')} · ${stamp}`;
+  if (seconds < 86400) return `Last seen ${plural(Math.floor(seconds / 3600), 'hour')} · ${stamp}`;
+  return `Last seen ${plural(Math.floor(seconds / 86400), 'day')} · ${stamp}`;
+}
+
+// Unread notifications the user can actually see: anything from a blocked
+// (or blocking) profile is hidden from the list, so it never counts either.
+function unreadNotifications(userId) {
+  return get(`SELECT COUNT(*) AS c FROM notifications n WHERE n.user_id = ? AND n.read_at IS NULL
+    AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = n.user_id AND b.blocked_id = n.actor_id) OR (b.blocker_id = n.actor_id AND b.blocked_id = n.user_id))`, [userId]).c;
+}
+
 function unreadMessages(userId) {
   return get('SELECT COUNT(*) AS c FROM messages WHERE receiver_id = ? AND read_at IS NULL', [userId]).c;
 }
@@ -324,25 +383,34 @@ function profileQuery(user, filters = {}) {
     where.push('u.gender = @wantedGender');
     params.wantedGender = pref === 'women' ? 'woman' : 'man';
   }
-  if (user.gender) {
+  // Someone who only wants stallions must never be shown to a mare, and a
+  // profile with "other" only fits people open to everyone.
+  if (user.gender === 'man' || user.gender === 'woman') {
     where.push(`(u.preference = 'bisexual' OR u.preference = @viewerPreference)`);
     params.viewerPreference = user.gender === 'woman' ? 'women' : 'men';
+  } else if (user.gender === 'other') {
+    where.push(`u.preference = 'bisexual'`);
   }
-  if (filters.minAge) {
+  const minAge = boundedInt(filters.minAge, 18, 120);
+  const maxAge = boundedInt(filters.maxAge, 18, 120);
+  const minFame = boundedInt(filters.minFame, 0, 100);
+  const maxFame = boundedInt(filters.maxFame, 0, 100);
+  if (minAge !== null) {
     where.push(`date(u.birthdate) <= date('now', @minAgeExpr)`);
-    params.minAgeExpr = `-${Number(filters.minAge)} years`;
+    params.minAgeExpr = `-${minAge} years`;
   }
-  if (filters.maxAge) {
-    where.push(`date(u.birthdate) >= date('now', @maxAgeExpr)`);
-    params.maxAgeExpr = `-${Number(filters.maxAge) + 1} years`;
+  if (maxAge !== null) {
+    // Born strictly after this date means younger than maxAge + 1.
+    where.push(`date(u.birthdate) > date('now', @maxAgeExpr)`);
+    params.maxAgeExpr = `-${maxAge + 1} years`;
   }
-  if (filters.minFame) {
+  if (minFame !== null) {
     where.push('u.fame >= @minFame');
-    params.minFame = Number(filters.minFame);
+    params.minFame = minFame;
   }
-  if (filters.maxFame) {
+  if (maxFame !== null) {
     where.push('u.fame <= @maxFame');
-    params.maxFame = Number(filters.maxFame);
+    params.maxFame = maxFame;
   }
   if (filters.location) {
     where.push('(lower(u.city) LIKE @location OR lower(u.neighborhood) LIKE @location)');
@@ -350,6 +418,12 @@ function profileQuery(user, filters = {}) {
   }
   // Accepts one or several tags ("coffee, geek" or ?tag=a&tag=b): every one of
   // them must be present on the candidate profile.
+  // "Common tags" filter: at least this many interests shared with the viewer.
+  const minCommon = boundedInt(filters.minCommon, 0, 15);
+  if (minCommon) {
+    where.push('(SELECT COUNT(*) FROM user_tags mine JOIN user_tags theirs ON theirs.tag_id = mine.tag_id WHERE mine.user_id = @me AND theirs.user_id = u.id) >= @minCommon');
+    params.minCommon = minCommon;
+  }
   const wantedTags = [].concat(filters.tag || [])
     .flatMap((value) => String(value).split(/[,\s]+/))
     .map(normalizeTag)
@@ -369,14 +443,17 @@ function profileQuery(user, filters = {}) {
   const requestedSort = typeof filters.sort === 'string' && Object.prototype.hasOwnProperty.call(sortMap, filters.sort)
     ? filters.sort
     : null;
-  const sort = requestedSort ? sortMap[requestedSort] : 'same_city DESC, common_tags DESC, u.fame DESC';
+  // Best match: same area first, then a score where every shared interest is
+  // worth 10 km of distance and every 10 fame points another 10 km.
+  const bestMatch = `same_city DESC, (coalesce(min(distance_km, 500), 250) - common_tags * 10 - u.fame) ASC`;
+  const sort = requestedSort ? sortMap[requestedSort] : bestMatch;
 
   params.myLat = user.latitude;
   params.myLng = user.longitude;
   const rows = all(`
     SELECT u.*, p.filename AS profile_photo,
       distance_km(@myLat, @myLng, u.latitude, u.longitude) AS distance_km,
-      CASE WHEN lower(coalesce(u.city,'')) = lower(coalesce((SELECT city FROM users WHERE id = @me),'')) THEN 1 ELSE 0 END AS same_city,
+      CASE WHEN coalesce(u.city,'') != '' AND lower(u.city) = lower(coalesce((SELECT city FROM users WHERE id = @me),'')) THEN 1 ELSE 0 END AS same_city,
       (SELECT COUNT(*) FROM user_tags mine JOIN user_tags theirs ON theirs.tag_id = mine.tag_id WHERE mine.user_id = @me AND theirs.user_id = u.id) AS common_tags
     FROM users u
     LEFT JOIN photos p ON p.user_id = u.id AND p.is_profile = 1
@@ -384,27 +461,51 @@ function profileQuery(user, filters = {}) {
     ORDER BY ${sort}
     LIMIT 100
   `, params);
-  return decorateProfiles(rows, user);
+  const profiles = decorateProfiles(rows, user);
+  return requestedSort ? profiles : spreadLookalikes(profiles);
+}
+
+// Best-match order only: nudge a profile down a few places when it would sit
+// right after one with the same breed (same photo pool) or the same name, so
+// the grid never shows two lookalikes side by side. Explicit sorts are left
+// exactly as requested.
+function spreadLookalikes(list) {
+  const out = [...list];
+  const clash = (a, b) => a && b && ((a.breed && a.breed === b.breed) || a.first_name === b.first_name);
+  for (let i = 1; i < out.length; i += 1) {
+    if (!clash(out[i - 1], out[i])) continue;
+    const j = out.findIndex((p, k) => k > i && !clash(out[i - 1], p) && !clash(p, out[i + 1]));
+    if (j !== -1) [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }
 
 app.use((req, res, next) => {
   const user = currentUser(req);
   res.locals.user = user;
-  res.locals.unreadCount = user ? get('SELECT COUNT(*) AS c FROM notifications WHERE user_id = ? AND read_at IS NULL', [user.id]).c : 0;
+  res.locals.unreadCount = user ? unreadNotifications(user.id) : 0;
   res.locals.unreadMessages = user ? unreadMessages(user.id) : 0;
   res.locals.error = null;
   res.locals.notice = null;
   res.locals.values = {};
   res.locals.lastSeenText = lastSeenText;
+  res.locals.lastSeenShort = lastSeenShort;
   res.locals.formatDistance = formatDistance;
-  res.locals.devMail = MAIL_MODE === 'console';
+  res.locals.genderLabels = GENDER_LABELS;
+  res.locals.preferenceLabels = PREFERENCE_LABELS;
   res.locals.currentPath = req.path;
   next();
 });
 
 app.get('/', (req, res) => {
   if (req.session.userId) return res.redirect('/browse');
-  res.render('index');
+  // The landing page shows real profiles from the database, not mockups.
+  const sample = all(`SELECT u.first_name, u.birthdate, u.breed, u.city, p.filename AS profile_photo
+    FROM users u JOIN photos p ON p.user_id = u.id AND p.is_profile = 1
+    WHERE u.verified = 1 AND u.id IN (SELECT MIN(id) FROM users WHERE verified = 1 GROUP BY coalesce(breed, id))
+    ORDER BY random() LIMIT 6`).map((row) => ({ ...row, age: ageFromBirthdate(row.birthdate) }));
+  const totals = get(`SELECT COUNT(*) AS horses, COUNT(DISTINCT lower(city)) AS towns FROM users WHERE verified = 1`);
+  res.render('index', { sample, totals });
 });
 
 app.get('/register', (req, res) => res.render('register', { values: {} }));
@@ -417,12 +518,15 @@ app.post('/register', authLimiter, (req, res) => {
   };
   const password = String(req.body.password || '');
   const errors = [];
-  if (!validator.isEmail(values.email)) errors.push('Enter a valid email address.');
+  if (!isEmail(values.email)) errors.push('Enter a valid email address.');
   if (!/^[a-zA-Z0-9_]{3,32}$/.test(values.username)) errors.push('Username must be 3–32 letters, digits, or underscores.');
   if (!values.first_name) errors.push('First name is required.');
   if (!values.last_name) errors.push('Last name is required.');
   const pwIssues = passwordIssues(password);
   if (pwIssues.length) errors.push(`Password needs ${pwIssues.join(', ')}.`);
+  if (!errors.length && get('SELECT 1 FROM users WHERE lower(username) = lower(?)', [values.username])) {
+    return res.status(409).render('register', { values, error: 'That username is taken.' });
+  }
   if (errors.length) return res.status(400).render('register', { values, error: errors.join(' ') });
 
   try {
@@ -432,10 +536,11 @@ app.post('/register', authLimiter, (req, res) => {
     const verifyUrl = `${APP_URL}/verify/${token}`;
     // The link travels by email only. Printing it in the response would let
     // anyone "verify" an address they do not own.
-    sendMail(values.email, 'Verify your Matcha account', `Hi ${values.first_name},\n\nActivate your Matcha account with this link:\n${verifyUrl}\n\nIf you did not create this account, ignore this message.`);
+    const mail = verifyEmail({ firstName: values.first_name, url: verifyUrl });
+    sendMail(values.email, mail.subject, mail.text, mail.html);
     res.render('login', {
       values: { username: values.username },
-      notice: 'Account created. Open the link we sent to your email to activate it. You cannot sign in before that.'
+      notice: `Almost there. We sent a confirmation link to ${values.email}. Open it to activate your account.`
     });
   } catch (err) {
     const message = /UNIQUE.*email/i.test(err.message) ? 'That email is already registered.'
@@ -449,7 +554,7 @@ app.get('/verify/:token', (req, res) => {
   const user = get('SELECT id FROM users WHERE verify_token = ?', [req.params.token]);
   if (!user) return res.status(404).render('login', { values: {}, error: 'Invalid or expired verification link.' });
   run('UPDATE users SET verified = 1, verify_token = NULL WHERE id = ?', [user.id]);
-  res.render('login', { values: {}, notice: 'Account activated. You can sign in now.' });
+  res.render('login', { values: {}, notice: 'Email confirmed. You can sign in now.' });
 });
 
 app.get('/login', (req, res) => res.render('login', { values: {} }));
@@ -461,7 +566,8 @@ app.post('/resend-verification', verificationLimiter, (req, res) => {
     const token = crypto.randomBytes(24).toString('hex');
     run('UPDATE users SET verify_token = ? WHERE id = ?', [token, user.id]);
     const verifyUrl = `${APP_URL}/verify/${token}`;
-    sendMail(user.email, 'Verify your Matcha account', `Hi ${user.first_name},\n\nActivate your Matcha account with this link:\n${verifyUrl}\n\nIf you did not create this account, ignore this message.`);
+    const mail = verifyEmail({ firstName: user.first_name, url: verifyUrl });
+    sendMail(user.email, mail.subject, mail.text, mail.html);
   }
   res.render('resend-verification', {
     values: { email },
@@ -476,10 +582,15 @@ app.post('/login', authLimiter, (req, res) => {
     return res.status(401).render('login', { values, error: 'Wrong username or password.' });
   }
   if (!user.verified) return res.status(403).render('login', { values, error: 'Please verify your email before signing in.' });
-  req.session.userId = user.id;
-  run('UPDATE users SET online = 1, last_seen = strftime(\'%s\',\'now\') WHERE id = ?', [user.id]);
-  const profileReady = user.gender && user.birthdate && user.bio && hasProfilePhoto(user.id);
-  res.redirect(profileReady ? '/browse' : '/profile?welcome=1');
+  // A fresh session id on every sign-in, so an id planted before login
+  // (session fixation) is worthless afterwards.
+  req.session.regenerate((err) => {
+    if (err) return res.status(500).render('login', { values, error: 'Could not sign you in. Try again.' });
+    req.session.userId = user.id;
+    run('UPDATE users SET online = 1, last_seen = strftime(\'%s\',\'now\') WHERE id = ?', [user.id]);
+    const profileReady = user.gender && user.birthdate && user.bio && hasProfilePhoto(user.id);
+    res.redirect(profileReady ? '/browse' : '/profile?welcome=1');
+  });
 });
 
 app.post('/logout', requireAuth, (req, res) => {
@@ -495,7 +606,8 @@ app.post('/forgot', authLimiter, (req, res) => {
     const token = crypto.randomBytes(24).toString('hex');
     run('UPDATE users SET reset_token = ?, reset_expires = ? WHERE id = ?', [token, Math.floor(Date.now() / 1000) + 3600, user.id]);
     const resetUrl = `${APP_URL}/reset/${token}`;
-    sendMail(email, 'Reset your Matcha password', `A password reset was requested for @${user.username}.\n\nThis link is valid for one hour:\n${resetUrl}\n\nIf it was not you, ignore this message. Your password stays unchanged.`);
+    const mail = resetEmail({ username: user.username, url: resetUrl });
+    sendMail(email, mail.subject, mail.text, mail.html);
   }
   // Always the same answer, with or without a match: the link must never reach
   // the browser, and the page must not reveal whether the email exists.
@@ -512,7 +624,8 @@ app.post('/reset/:token', authLimiter, (req, res) => {
   if (issues.length) return res.status(400).render('reset', { token: req.params.token, error: `Password needs ${issues.join(', ')}.` });
   const user = get('SELECT * FROM users WHERE reset_token = ? AND reset_expires > ?', [req.params.token, Math.floor(Date.now() / 1000)]);
   if (!user) return res.status(404).render('forgot', { values: {}, error: 'That reset link is invalid or expired.' });
-  run('UPDATE users SET password_hash = ?, reset_token = NULL, reset_expires = NULL WHERE id = ?', [bcrypt.hashSync(req.body.password, 12), user.id]);
+  // Opening the emailed link proves the address, so it also confirms it.
+  run('UPDATE users SET password_hash = ?, reset_token = NULL, reset_expires = NULL, verified = 1, verify_token = NULL WHERE id = ?', [bcrypt.hashSync(req.body.password, 12), user.id]);
   res.render('login', { values: { username: user.username }, notice: 'Password updated.' });
 });
 
@@ -521,8 +634,8 @@ function renderProfile(res, profile, opts = {}) {
   const photos = all('SELECT * FROM photos WHERE user_id = ? ORDER BY is_profile DESC, created_at DESC', [profile.id]);
   // One row per visitor (their latest visit), so a single person refreshing the
   // page cannot push everyone else out of the history.
-  const visits = all(`SELECT u.username, u.first_name, u.last_name, p.filename AS profile_photo, MAX(v.created_at) AS created_at, COUNT(*) AS visit_count FROM visits v JOIN users u ON u.id = v.visitor_id LEFT JOIN photos p ON p.user_id = u.id AND p.is_profile = 1 WHERE v.visited_id = ? GROUP BY v.visitor_id ORDER BY created_at DESC LIMIT 12`, [profile.id]);
-  const likes = all(`SELECT u.username, u.first_name, u.last_name, p.filename AS profile_photo, l.created_at FROM likes l JOIN users u ON u.id = l.liker_id LEFT JOIN photos p ON p.user_id = u.id AND p.is_profile = 1 WHERE l.liked_id = ? ORDER BY l.created_at DESC LIMIT 12`, [profile.id]);
+  const visits = all(`SELECT u.username, u.first_name, u.last_name, p.filename AS profile_photo, MAX(v.created_at) AS created_at, COUNT(*) AS visit_count FROM visits v JOIN users u ON u.id = v.visitor_id LEFT JOIN photos p ON p.user_id = u.id AND p.is_profile = 1 WHERE v.visited_id = ? AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = v.visited_id AND b.blocked_id = u.id) OR (b.blocker_id = u.id AND b.blocked_id = v.visited_id)) GROUP BY v.visitor_id ORDER BY created_at DESC LIMIT 12`, [profile.id]);
+  const likes = all(`SELECT u.username, u.first_name, u.last_name, p.filename AS profile_photo, l.created_at FROM likes l JOIN users u ON u.id = l.liker_id LEFT JOIN photos p ON p.user_id = u.id AND p.is_profile = 1 WHERE l.liked_id = ? AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = l.liked_id AND b.blocked_id = u.id) OR (b.blocker_id = u.id AND b.blocked_id = l.liked_id)) ORDER BY l.created_at DESC LIMIT 12`, [profile.id]);
   return res.render('profile', {
     profile,
     tags,
@@ -530,6 +643,9 @@ function renderProfile(res, profile, opts = {}) {
     visits,
     likes,
     age: ageFromBirthdate(profile.birthdate),
+    breeds: [...new Set(credits.horses.map((h) => h.breed))].sort(),
+    likeCount: get('SELECT COUNT(*) AS c FROM likes l WHERE l.liked_id = ? AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = l.liked_id AND b.blocked_id = l.liker_id) OR (b.blocker_id = l.liker_id AND b.blocked_id = l.liked_id))', [profile.id]).c,
+    visitorCount: get('SELECT COUNT(DISTINCT visitor_id) AS c FROM visits v WHERE v.visited_id = ? AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = v.visited_id AND b.blocked_id = v.visitor_id) OR (b.blocker_id = v.visitor_id AND b.blocked_id = v.visited_id))', [profile.id]).c,
     welcome: opts.welcome || false,
     error: opts.error || null,
     notice: opts.notice || null
@@ -540,7 +656,7 @@ app.get('/profile', requireAuth, (req, res) => {
   renderProfile(res, req.user, { welcome: req.query.welcome === '1' });
 });
 
-app.post('/profile', requireAuth, upload.array('photos', 5), (req, res) => {
+app.post('/profile', requireAuth, upload.array('photos', 5), async (req, res, next) => {
   const uploaded = keepOnlyRealImages(req.files);
   const rejectedUploads = (req.files || []).length - uploaded.length;
   let overCap = 0;
@@ -551,14 +667,15 @@ app.post('/profile', requireAuth, upload.array('photos', 5), (req, res) => {
     const bio = sanitizeText(req.body.bio, 900);
     const city = sanitizeText(req.body.city, 80);
     const neighborhood = sanitizeText(req.body.neighborhood, 80);
+    const breed = sanitizeText(req.body.breed, 60);
     const gender = ['man', 'woman', 'other'].includes(req.body.gender) ? req.body.gender : null;
     const preference = ['men', 'women', 'bisexual'].includes(req.body.preference) ? req.body.preference : 'bisexual';
     if (!firstName) throw userError('First name is required.');
     if (!lastName) throw userError('Last name is required.');
-    if (!validator.isEmail(email)) throw userError('Enter a valid email address.');
+    if (!isEmail(email)) throw userError('Enter a valid email address.');
     if (req.body.birthdate) {
       const age = ageFromBirthdate(req.body.birthdate);
-      if (age == null) throw userError('Birthdate is invalid.');
+      if (age == null) throw userError('Birthdate must be a real date (YYYY-MM-DD).');
       if (age < 18) throw userError('You must be at least 18 years old.');
       if (age > 120) throw userError('That birthdate looks unrealistic.');
     }
@@ -566,17 +683,33 @@ app.post('/profile', requireAuth, upload.array('photos', 5), (req, res) => {
     // GPS coordinates are only kept while consent is ticked; without them a
     // manual city is mandatory, since matching is location-driven.
     const consent = req.body.location_consent ? 1 : 0;
-    const latitude = consent && req.body.latitude !== '' && req.body.latitude != null ? Number(req.body.latitude) : null;
-    const longitude = consent && req.body.longitude !== '' && req.body.longitude != null ? Number(req.body.longitude) : null;
+    let latitude = consent && req.body.latitude !== '' && req.body.latitude != null ? Number(req.body.latitude) : null;
+    let longitude = consent && req.body.longitude !== '' && req.body.longitude != null ? Number(req.body.longitude) : null;
     if (latitude !== null && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90)) throw userError('Latitude must be between -90 and 90.');
     if (longitude !== null && (!Number.isFinite(longitude) || longitude < -180 || longitude > 180)) throw userError('Longitude must be between -180 and 180.');
     if ((latitude === null || longitude === null) && !city) {
       throw userError('Set your city, or tick the GPS box. Matching needs a location.');
     }
+    // Without GPS, the typed place is turned into the approximate centre of
+    // that town, so distances and "closest first" still work. It is only
+    // looked up again when the place actually changes.
+    if (latitude === null || longitude === null) {
+      const samePlace = !req.user.location_consent && req.user.latitude != null
+        && (req.user.city || '') === city && (req.user.neighborhood || '') === neighborhood;
+      if (samePlace) {
+        latitude = req.user.latitude;
+        longitude = req.user.longitude;
+      } else {
+        const centre = await forwardGeocode(city, neighborhood).catch(() => null)
+          || (neighborhood ? await forwardGeocode(city, '').catch(() => null) : null);
+        latitude = centre ? centre.latitude : null;
+        longitude = centre ? centre.longitude : null;
+      }
+    }
 
     transaction(() => {
-      run(`UPDATE users SET first_name=?, last_name=?, email=?, gender=?, preference=?, birthdate=?, bio=?, city=?, neighborhood=?, latitude=?, longitude=?, location_consent=? WHERE id=?`, [
-        firstName, lastName, email, gender, preference, req.body.birthdate || null, bio,
+      run(`UPDATE users SET first_name=?, last_name=?, email=?, gender=?, preference=?, birthdate=?, bio=?, breed=?, city=?, neighborhood=?, latitude=?, longitude=?, location_consent=? WHERE id=?`, [
+        firstName, lastName, email, gender, preference, req.body.birthdate || null, bio, breed || null,
         city, neighborhood, latitude, longitude, consent, req.user.id
       ]);
       run('DELETE FROM user_tags WHERE user_id = ?', [req.user.id]);
@@ -614,7 +747,7 @@ app.post('/profile', requireAuth, upload.array('photos', 5), (req, res) => {
       res.status(409);
       return renderProfile(res, req.user, { error: 'That email is already used by another account.' });
     }
-    if (!err.userFacing) throw err;
+    if (!err.userFacing) return next(err);
     res.status(err.status || 400);
     renderProfile(res, req.user, { error: err.message });
   }
@@ -656,12 +789,15 @@ app.get('/search', requireAuth, (req, res) => {
 
 app.get('/users/:username', requireAuth, (req, res) => {
   const profile = get(`SELECT u.*, p.filename AS profile_photo FROM users u LEFT JOIN photos p ON p.user_id = u.id AND p.is_profile = 1 WHERE u.username = ?`, [req.params.username]);
-  if (!profile || profile.id === req.user.id) return res.status(404).render('error', { message: 'Profile not found.' });
+  if (profile && profile.id === req.user.id) return res.redirect('/profile');
+  if (!profile || !profile.verified) return res.status(404).render('error', { message: 'Profile not found.' });
   const blocked = get('SELECT 1 FROM blocks WHERE (blocker_id=? AND blocked_id=?) OR (blocker_id=? AND blocked_id=?)', [req.user.id, profile.id, profile.id, req.user.id]);
   if (blocked) return res.status(404).render('error', { message: 'Profile not available.' });
+  // A reload within the same minute is not a new visit worth announcing.
+  const recentVisit = get('SELECT 1 FROM visits WHERE visitor_id = ? AND visited_id = ? AND created_at > ?', [req.user.id, profile.id, Math.floor(Date.now() / 1000) - 60]);
   run('INSERT INTO visits (visitor_id, visited_id) VALUES (?, ?)', [req.user.id, profile.id]);
   recalcFame(profile.id);
-  notify(profile.id, req.user.id, 'visit', `${req.user.username} viewed your profile.`, `/users/${req.user.username}`);
+  if (!recentVisit) notify(profile.id, req.user.id, 'visit', `${req.user.first_name} (@${req.user.username}) viewed your profile.`, `/users/${req.user.username}`);
   const tags = all('SELECT t.name FROM tags t JOIN user_tags ut ON ut.tag_id = t.id WHERE ut.user_id = ?', [profile.id]);
   const photos = all('SELECT * FROM photos WHERE user_id = ? ORDER BY is_profile DESC, created_at DESC', [profile.id]);
   const liked = Boolean(get('SELECT 1 FROM likes WHERE liker_id = ? AND liked_id = ?', [req.user.id, profile.id]));
@@ -682,21 +818,23 @@ app.get('/users/:username', requireAuth, (req, res) => {
 });
 
 app.post('/users/:id/like', requireAuth, (req, res) => {
-  const target = get('SELECT * FROM users WHERE id = ?', [positiveId(req.params.id)]);
+  const target = get('SELECT * FROM users WHERE id = ? AND verified = 1', [positiveId(req.params.id)]);
   if (!target) return res.status(404).render('error', { message: 'Profile not found.' });
   if (target.id === req.user.id) return res.redirect('/browse');
   if (isBlockedPair(req.user.id, target.id)) return res.status(404).render('error', { message: 'Profile not available.' });
   if (!hasProfilePhoto(req.user.id)) {
     return res.redirect(`/users/${target.username}?need_photo=1`);
   }
-  run('INSERT OR IGNORE INTO likes (liker_id, liked_id) VALUES (?, ?)', [req.user.id, target.id]);
+  const added = run('INSERT OR IGNORE INTO likes (liker_id, liked_id) VALUES (?, ?)', [req.user.id, target.id]).changes;
   // Liking again lifts the notification mute a previous unlike had set.
   run('DELETE FROM unlikes WHERE unliker_id = ? AND unliked_id = ?', [req.user.id, target.id]);
+  // A repeated click (or a resubmitted form) must not announce the like twice.
+  if (!added) return res.redirect(`/users/${target.username}`);
   recalcFame(target.id);
-  notify(target.id, req.user.id, 'like', `${req.user.username} liked your profile.`, `/users/${req.user.username}`);
+  notify(target.id, req.user.id, 'like', `${req.user.first_name} (@${req.user.username}) likes you.`, `/users/${req.user.username}`);
   if (connected(req.user.id, target.id)) {
-    notify(target.id, req.user.id, 'match', `You and ${req.user.username} are now connected.`, `/chat?with=${req.user.id}`);
-    notify(req.user.id, target.id, 'match', `You and ${target.username} are now connected.`, `/chat?with=${target.id}`);
+    notify(target.id, req.user.id, 'match', `You matched with ${req.user.first_name}.`, `/chat?with=${req.user.id}`);
+    notify(req.user.id, target.id, 'match', `You matched with ${target.first_name}.`, `/chat?with=${target.id}`);
   }
   res.redirect(`/users/${target.username}`);
 });
@@ -711,7 +849,7 @@ app.post('/users/:id/unlike', requireAuth, (req, res) => {
   // messages from them until this user likes them again.
   if (had) run('INSERT OR IGNORE INTO unlikes (unliker_id, unliked_id) VALUES (?, ?)', [req.user.id, target.id]);
   recalcFame(target.id);
-  if (wasConnected) notify(target.id, req.user.id, 'unlike', `${req.user.username} disconnected from you.`, `/users/${req.user.username}`);
+  if (wasConnected) notify(target.id, req.user.id, 'unlike', `${req.user.first_name} (@${req.user.username}) unliked you.`, `/users/${req.user.username}`);
   res.redirect(`/users/${target.username}`);
 });
 
@@ -757,21 +895,55 @@ app.get('/chat', requireAuth, (req, res) => {
       ORDER BY created_at DESC, id DESC LIMIT 200
     ) ORDER BY created_at ASC, id ASC
   `, [req.user.id, active.id, active.id, req.user.id]) : [];
-  if (active) run('UPDATE messages SET read_at = strftime(\'%s\',\'now\') WHERE sender_id = ? AND receiver_id = ? AND read_at IS NULL', [active.id, req.user.id]);
+  if (active) {
+    run('UPDATE messages SET read_at = strftime(\'%s\',\'now\') WHERE sender_id = ? AND receiver_id = ? AND read_at IS NULL', [active.id, req.user.id]);
+    // The counters were taken before this conversation was read.
+    active.unread = 0;
+    res.locals.unreadMessages = unreadMessages(req.user.id);
+  }
   res.render('chat', { people, active, messages });
 });
 
 app.post('/chat/:id', requireAuth, (req, res) => {
   const receiver = get('SELECT * FROM users WHERE id = ?', [positiveId(req.params.id)]);
   const body = sanitizeText(req.body.body, 1000);
-  if (!receiver || !body || !connected(req.user.id, receiver.id) || isBlockedPair(req.user.id, receiver.id)) return res.redirect('/chat');
+  const viaFetch = req.get('X-Requested-With') === 'fetch';
+  if (!receiver || !body || !connected(req.user.id, receiver.id) || isBlockedPair(req.user.id, receiver.id)) {
+    return viaFetch ? res.status(403).json({ error: 'You can only message horses you matched with.' }) : res.redirect('/chat');
+  }
   const info = run('INSERT INTO messages (sender_id, receiver_id, body) VALUES (?, ?, ?)', [req.user.id, receiver.id, body]);
   const message = get('SELECT * FROM messages WHERE id = ?', [info.lastInsertRowid]);
   const payload = { ...message, sender_username: req.user.username };
   io.to(`user:${receiver.id}`).emit('message', payload);
   io.to(`user:${req.user.id}`).emit('message', payload);
-  notify(receiver.id, req.user.id, 'message', `${req.user.username}: ${body.slice(0, 60)}${body.length > 60 ? '…' : ''}`, `/chat?with=${req.user.id}`);
+  notify(receiver.id, req.user.id, 'message', `${req.user.first_name}: ${body.slice(0, 60)}${body.length > 60 ? '…' : ''}`, `/chat?with=${req.user.id}`);
+  if (viaFetch) return res.status(201).json({ ok: true });
   res.redirect(`/chat?with=${receiver.id}`);
+});
+
+// Called by the open conversation when a message arrives live, so the unread
+// counters match what the user has actually seen.
+app.post('/chat/:id/read', requireAuth, (req, res) => {
+  const otherId = positiveId(req.params.id);
+  if (otherId) run('UPDATE messages SET read_at = strftime(\'%s\',\'now\') WHERE sender_id = ? AND receiver_id = ? AND read_at IS NULL', [otherId, req.user.id]);
+  res.json({ unread: unreadMessages(req.user.id) });
+});
+
+// Turns the browser's GPS fix into a town and neighbourhood for the profile form.
+app.get('/geo/reverse', requireAuth, async (req, res) => {
+  const lat = Number(req.query.lat);
+  const lon = Number(req.query.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+    return res.status(400).json({ error: 'Invalid coordinates.' });
+  }
+  try {
+    const place = await reverseGeocode(lat, lon);
+    if (!place) return res.status(404).json({ error: 'No town found at that position.' });
+    res.json(place);
+  } catch (err) {
+    console.warn(`Reverse geocoding failed: ${err.message}`);
+    res.status(502).json({ error: 'Could not look up the town right now.' });
+  }
 });
 
 // Feeds the interest autocomplete: tags are shared across users, so the ones
@@ -785,8 +957,10 @@ app.get('/tags', requireAuth, (req, res) => {
 });
 
 app.get('/notifications', requireAuth, (req, res) => {
-  const notifications = all(`SELECT n.*, u.username AS actor_username, p.filename AS actor_photo FROM notifications n LEFT JOIN users u ON u.id = n.actor_id LEFT JOIN photos p ON p.user_id = u.id AND p.is_profile = 1 WHERE n.user_id = ? ORDER BY n.created_at DESC LIMIT 100`, [req.user.id]);
+  const notifications = all(`SELECT n.*, u.username AS actor_username, p.filename AS actor_photo FROM notifications n LEFT JOIN users u ON u.id = n.actor_id LEFT JOIN photos p ON p.user_id = u.id AND p.is_profile = 1 WHERE n.user_id = ? AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = n.user_id AND b.blocked_id = n.actor_id) OR (b.blocker_id = n.actor_id AND b.blocked_id = n.user_id)) ORDER BY n.created_at DESC LIMIT 100`, [req.user.id]);
   run('UPDATE notifications SET read_at = strftime(\'%s\',\'now\') WHERE user_id = ? AND read_at IS NULL', [req.user.id]);
+  // Everything is read now: the header badge must not show the old count.
+  res.locals.unreadCount = 0;
   res.render('notifications', { notifications });
 });
 
@@ -826,8 +1000,10 @@ app.use((err, req, res, next) => {
       notice: null,
       values: {},
       lastSeenText,
+      lastSeenShort,
       formatDistance,
-      devMail: MAIL_MODE === 'console',
+      genderLabels: GENDER_LABELS,
+      preferenceLabels: PREFERENCE_LABELS,
       currentPath: req.path
     });
   }
@@ -841,13 +1017,17 @@ app.use((err, req, res, next) => {
 
   // Only messages we wrote ourselves reach the user; anything else (SQLite,
   // EJS, Node) would leak internals, so it becomes a generic sentence.
-  const status = err && err.status >= 400 && err.status < 500 ? err.status : 400;
+  const clientError = err && (err.userFacing || EXPECTED_ERROR_CODES.has(err.code) || EXPECTED_ERROR_CODES.has(err.type));
+  const status = err && err.status >= 400 && err.status < 600 ? err.status : clientError ? 400 : 500;
   const message = err && err.userFacing && err.message ? err.message : 'Something went wrong with that request.';
   res.status(status).render('error', { message });
 });
 
-app.use((req, res) => res.status(404).render('error', { message: 'Page not found.' }));
+app.use((req, res) => res.status(404).render('error', { message: 'Page not found.', status: 404 }));
 
 server.listen(PORT, () => {
   console.log(`Matcha running at ${APP_URL}`);
+  console.log(sendMail.smtpReady
+    ? `Email: SMTP via ${process.env.SMTP_HOST}:${process.env.SMTP_PORT || 587}`
+    : 'Email: console mode, verification and reset links are printed here.');
 });

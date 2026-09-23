@@ -1,56 +1,47 @@
-<%- include('partials/head') %>
-<section class="chat-layout">
-  <aside class="panel people">
-    <h2>Connections</h2>
+<%- include('partials/head', { title: 'Chat' }) %>
+<section class="chat-layout<%= active ? ' has-active' : '' %>">
+  <aside class="people">
+    <h2 class="section-title">Matches</h2>
     <% if (!people.length) { %>
-      <div class="empty">
-        <strong>No connections</strong>
-        People you liked who liked you back show up here.
+      <div class="empty small">
+        <p>No matches yet. When someone you liked likes you back, they show up here.</p>
+        <a class="button" href="/browse">See suggestions</a>
       </div>
     <% } %>
     <% people.forEach(p => { %>
-      <a class="chat-row <%= active && active.id === p.id ? 'active' : '' %>" href="/chat?with=<%= p.id %>">
-        <% if (p.profile_photo) { %><img src="/static/uploads/<%= p.profile_photo %>" alt=""><% } else { %><div class="placeholder"></div><% } %>
-        <div style="min-width:0;">
-          <div class="chat-name"><%= p.first_name || p.username %></div>
-          <div class="chat-preview"><%= p.last_message || 'No messages' %></div>
-        </div>
-        <div class="chat-meta">
-          <% if (p.unread) { %><span class="badge"><%= p.unread %></span><% } %>
-        </div>
+      <a class="chat-row <%= active && active.id === p.id ? 'active' : '' %>" href="/chat?with=<%= p.id %>" data-chat-row="<%= p.id %>">
+        <span class="avatar"><% if (p.profile_photo) { %><img src="/static/uploads/<%= p.profile_photo %>" alt=""><% } %><% if (p.online) { %><i class="dot"></i><% } %></span>
+        <span class="chat-text">
+          <span class="chat-name"><%= p.first_name || p.username %></span>
+          <span class="chat-preview"><%= p.last_message || 'No messages yet' %></span>
+        </span>
+        <% if (p.unread) { %><span class="badge"><%= p.unread %></span><% } %>
       </a>
     <% }) %>
   </aside>
-  <section class="panel chat">
+  <section class="chat">
     <% if (active) { %>
-      <div class="chat-head">
-        <% if (active.profile_photo) { %><img src="/static/uploads/<%= active.profile_photo %>" alt=""><% } else { %><div class="placeholder"></div><% } %>
+      <header class="chat-head">
+        <a class="back" href="/chat" aria-label="All conversations"><svg class="ico"><use href="#i-back"/></svg></a>
+        <span class="avatar"><% if (active.profile_photo) { %><img src="/static/uploads/<%= active.profile_photo %>" alt=""><% } %></span>
         <div>
-          <h1><%= active.first_name || active.username %> <%= active.last_name || '' %></h1>
-          <p><span class="online-dot <%= active.online ? 'live' : '' %>"></span><%= lastSeenText(active) %> · <a href="/users/<%= active.username %>">View profile</a></p>
+          <h1><a href="/users/<%= active.username %>"><%= active.first_name %> <%= active.last_name %></a></h1>
+          <p><span class="online-dot <%= active.online ? 'live' : '' %>"></span><%= lastSeenText(active) %></p>
         </div>
-      </div>
+      </header>
       <div id="messages" data-active-id="<%= active.id %>">
         <% if (!messages.length) { %>
-          <p class="empty" style="margin:auto;">No messages.</p>
-        <% } else { %>
-          <% messages.forEach(m => { %>
-            <p class="bubble <%= m.sender_id === user.id ? 'mine' : 'theirs' %>" data-at="<%= m.created_at %>">
-              <%= m.body %>
-              <small></small>
-            </p>
-          <% }) %>
+          <p class="chat-empty" data-chat-empty>You matched. Say hello.</p>
         <% } %>
+        <% messages.forEach(m => { %><p class="bubble <%= m.sender_id === user.id ? 'mine' : 'theirs' %>" data-at="<%= m.created_at %>"><span><%= m.body %></span><small></small></p><% }) %>
       </div>
       <form method="post" action="/chat/<%= active.id %>" class="send">
-        <input name="body" maxlength="1000" autocomplete="off" required placeholder="Write a message">
-        <button class="primary" type="submit">Send</button>
+        <input name="body" maxlength="1000" autocomplete="off" required placeholder="Message <%= active.first_name %>">
+        <button class="primary" type="submit" aria-label="Send"><svg class="ico"><use href="#i-send"/></svg></button>
       </form>
     <% } else { %>
-      <h1>Chat</h1>
-      <div class="empty" style="margin-top:14px;">
-        <strong>Select a connection</strong>
-        You can only chat with people you liked who liked you back.
+      <div class="chat-idle">
+                <p>Pick a conversation.</p>
       </div>
     <% } %>
   </section>

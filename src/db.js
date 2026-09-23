@@ -2,7 +2,10 @@ const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
 
-const dbPath = process.env.DATABASE_PATH || path.join(process.cwd(), 'data', 'matcha.sqlite');
+// Relative paths in DATABASE_PATH are taken from the project root, so the app
+// finds the same database whatever folder it is started from.
+const root = path.join(__dirname, '..');
+const dbPath = path.resolve(root, process.env.DATABASE_PATH || path.join('data', 'matcha.sqlite'));
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
 const db = new Database(dbPath);
@@ -130,6 +133,8 @@ function migrate() {
 
   const hasLink = db.prepare("PRAGMA table_info(notifications)").all().some((c) => c.name === 'link');
   if (!hasLink) db.exec('ALTER TABLE notifications ADD COLUMN link TEXT');
+  const hasBreed = db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'breed');
+  if (!hasBreed) db.exec('ALTER TABLE users ADD COLUMN breed TEXT');
 }
 
 function all(sql, params = {}) {

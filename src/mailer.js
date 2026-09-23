@@ -83,22 +83,43 @@ function encodeHeader(value) {
   return /^[\x20-\x7e]*$/.test(value) ? value : `=?UTF-8?B?${Buffer.from(value, 'utf8').toString('base64')}?=`;
 }
 
-function buildMessage({ from, to, subject, text }) {
-  const body = String(text).replace(/\r?\n/g, '\r\n').replace(/^\./gm, '..');
+// Base64 parts never produce a line starting with "." or longer than 76
+// characters, so no dot-stuffing or 8BITMIME support is needed on the wire.
+function base64Part(type, content) {
+  const encoded = Buffer.from(String(content), 'utf8').toString('base64').replace(/.{1,76}/g, '$&\r\n');
+  return [`Content-Type: ${type}; charset=utf-8`, 'Content-Transfer-Encoding: base64', '', encoded].join('\r\n');
+}
+
+function buildMessage({ from, to, subject, text, html }) {
   const headers = [
     `From: ${from}`,
     `To: ${to}`,
     `Subject: ${encodeHeader(subject)}`,
     `Date: ${new Date().toUTCString()}`,
-    `Message-ID: <${crypto.randomUUID()}@matcha>`,
-    'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset=utf-8',
-    'Content-Transfer-Encoding: 8bit'
+    `Message-ID: <${crypto.randomUUID()}@${(from.match(/@([^>\s]+)/) || [null, 'matcha.local'])[1]}>`,
+    'MIME-Version: 1.0'
   ];
-  return `${headers.join('\r\n')}\r\n\r\n${body}`;
+  if (!html) return `${headers.join('\r\n')}\r\n${base64Part('text/plain', text)}`;
+  const boundary = `----=_stable_${crypto.randomBytes(12).toString('hex')}`;
+  headers.push(`Content-Type: multipart/alternative; boundary="${boundary}"`);
+  return [
+    headers.join('\r\n'),
+    '',
+    `--${boundary}`,
+    base64Part('text/plain', text),
+    `--${boundary}`,
+    base64Part('text/html', html),
+    `--${boundary}--`,
+    ''
+  ].join('\r\n');
 }
 
-async function sendSmtpMail(config, { to, subject, text }) {
+function authMechanisms(ehloReply) {
+  const line = ehloReply.split('\n').find((l) => /^250[-\s]AUTH[\s=]/i.test(l));
+  return line ? line.slice(9).toUpperCase().split(/\s+/) : [];
+}
+
+async function sendSmtpMail(config, { to, subject, text, html }) {
   const port = Number(config.port);
   const secure = config.secure;
   let socket = await connect({ host: config.host, port, servername: config.host, secure });
@@ -123,61 +144,80 @@ async function sendSmtpMail(config, { to, subject, text }) {
     }
 
     if (config.user) {
-      await session.send('AUTH LOGIN', [334]);
-      await session.send(Buffer.from(config.user, 'utf8').toString('base64'), [334]);
-      await session.send(Buffer.from(config.pass, 'utf8').toString('base64'), [235]);
+      // PLAIN when offered (one round-trip), LOGIN otherwise.
+      if (authMechanisms(greeting.reply).includes('PLAIN')) {
+        const token = Buffer.from(`\0${config.user}\0${config.pass}`, 'utf8').toString('base64');
+        await session.send(`AUTH PLAIN ${token}`, [235]);
+      } else {
+        await session.send('AUTH LOGIN', [334]);
+        await session.send(Buffer.from(config.user, 'utf8').toString('base64'), [334]);
+        await session.send(Buffer.from(config.pass, 'utf8').toString('base64'), [235]);
+      }
     }
 
     await session.send(`MAIL FROM:<${config.fromAddress}>`, [250]);
     await session.send(`RCPT TO:<${to}>`, [250, 251]);
     await session.send('DATA', [354]);
-    await session.send(`${buildMessage({ from: config.from, to, subject, text })}\r\n.`, [250]);
+    const accepted = await session.send(`${buildMessage({ from: config.from, to, subject, text, html })}\r\n.`, [250]);
     await session.send('QUIT', [221]).catch(() => {});
+    return accepted.reply;
   } finally {
     socket.destroy();
   }
 }
 
 function readConfig(env) {
-  const from = env.MAIL_FROM || 'Matcha <no-reply@matcha.local>';
+  // Most providers (Gmail, Outlook, Brevo...) reject a From that does not
+  // belong to the authenticated account, so default to the SMTP login.
+  const user = env.SMTP_USER || '';
+  const from = env.MAIL_FROM || (user.includes('@') ? `Matcha <${user}>` : 'Matcha <no-reply@matcha.local>');
   const fromAddress = (from.match(/<([^>]+)>/) || [null, from])[1].trim();
   return {
     mode: env.MAIL_MODE || 'console',
     host: env.SMTP_HOST || '',
     port: Number(env.SMTP_PORT || 587),
     secure: String(env.SMTP_SECURE || '').toLowerCase() === 'true' || Number(env.SMTP_PORT) === 465,
-    user: env.SMTP_USER || '',
-    pass: env.SMTP_PASS || '',
-    clientName: env.SMTP_CLIENT_NAME || 'matcha.local',
+    user,
+    // Gmail shows app passwords as "abcd efgh ijkl mnop"; the spaces are cosmetic.
+    pass: /smtp\.gmail\.com$/i.test(env.SMTP_HOST || '') ? String(env.SMTP_PASS || '').replace(/\s+/g, '') : env.SMTP_PASS || '',
+    clientName: env.SMTP_CLIENT_NAME || 'localhost',
     from,
     fromAddress
   };
 }
 
-// Returns a sendMail(to, subject, text) that never rejects: a broken mail server
+// Returns a sendMail(to, subject, text, html) that never rejects: a broken mail server
 // must not turn a legitimate signup into an unhandled server error.
 function createMailer(env = process.env, logger = console) {
   const config = readConfig(env);
-  const smtpReady = config.mode === 'smtp' && config.host;
+  const missingPass = Boolean(config.user) && !config.pass;
+  const smtpReady = config.mode === 'smtp' && config.host && !missingPass;
 
   if (config.mode === 'smtp' && !config.host) {
     logger.warn('MAIL_MODE=smtp but SMTP_HOST is not set. Falling back to console delivery.');
+  } else if (config.mode === 'smtp' && missingPass) {
+    logger.warn('MAIL_MODE=smtp but SMTP_PASS is empty. Falling back to console delivery until it is set.');
   }
 
-  return async function sendMail(to, subject, text) {
+  async function sendMail(to, subject, text, html) {
     if (!smtpReady) {
-      logger.log(`\n--- Matcha email (${to}) ---\n${subject}\n${text}\n---------------------------\n`);
+      logger.log(`\n--- email to ${to} ---\n${subject}\n\n${text}\n---------------------------\n`);
       return { delivered: false, mode: 'console' };
     }
     try {
-      await sendSmtpMail(config, { to, subject, text });
-      logger.log(`Matcha email sent to ${to}: ${subject}`);
-      return { delivered: true, mode: 'smtp' };
+      const reply = await sendSmtpMail(config, { to, subject, text, html });
+      logger.log(`Email sent to ${to}: ${subject}`);
+      // Ethereal is a test inbox: point straight at the captured message.
+      const msgId = /ethereal\.email$/i.test(config.host) && String(reply || '').match(/MSGID=([^\s\]]+)/);
+      if (msgId) logger.log(`  View it: https://ethereal.email/message/${msgId[1]}`);
+      return { delivered: true, mode: 'smtp', preview: msgId ? `https://ethereal.email/message/${msgId[1]}` : null };
     } catch (err) {
-      logger.error(`Matcha email to ${to} failed: ${err.message}`);
+      logger.error(`Email to ${to} failed: ${err.message}`);
       return { delivered: false, mode: 'smtp', error: err };
     }
-  };
+  }
+  sendMail.smtpReady = Boolean(smtpReady);
+  return sendMail;
 }
 
-module.exports = { createMailer, readConfig };
+module.exports = { createMailer, readConfig, buildMessage };
