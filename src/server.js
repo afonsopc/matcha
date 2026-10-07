@@ -12,13 +12,9 @@ const rateLimit = require('express-rate-limit');
 const multer = require('multer');
 const { Server } = require('socket.io');
 const { reverseGeocode, forwardGeocode } = require('./geo');
-const { migrate, all, get, run, transaction } = require('./db');
+const { ready, migrate, all, get, run, transaction } = require('./db');
 const { createMailer } = require('./mailer');
 const { verifyEmail, resetEmail } = require('./emails');
-
-migrate();
-// Presence lives in memory, so a restart must not leave stale "online now" flags.
-run('UPDATE users SET online = 0 WHERE online = 1');
 
 const app = express();
 const server = http.createServer(app);
@@ -95,7 +91,7 @@ function keepOnlyRealImages(files) {
     const storedExt = path.extname(file.filename).toLowerCase();
     const matches = actualExt === storedExt || (actualExt === '.jpg' && storedExt === '.jpeg');
     if (matches) kept.push(file);
-    else fs.rm(file.path, { force: true }, () => {});
+    else fs.unlink(file.path, () => {});
   }
   return kept;
 }
@@ -724,7 +720,7 @@ app.post('/profile', requireAuth, upload.array('photos', 5), async (req, res, ne
         // unreferenced upload is left behind.
         if (count >= 5) {
           overCap += 1;
-          fs.rm(file.path, { force: true }, () => {});
+          fs.unlink(file.path, () => {});
           continue;
         }
         const hasProfile = hasProfilePhoto(req.user.id);
@@ -742,7 +738,7 @@ app.post('/profile', requireAuth, upload.array('photos', 5), async (req, res, ne
     }
     renderProfile(res, fresh, { notice: 'Profile saved.' });
   } catch (err) {
-    for (const file of uploaded) fs.rm(file.path, { force: true }, () => {});
+    for (const file of uploaded) fs.unlink(file.path, () => {});
     if (/UNIQUE.*email/i.test(err.message)) {
       res.status(409);
       return renderProfile(res, req.user, { error: 'That email is already used by another account.' });
@@ -767,7 +763,7 @@ app.post('/photos/:id/delete', requireAuth, (req, res) => {
   if (photo) {
     const wasProfile = photo.is_profile === 1;
     run('DELETE FROM photos WHERE id = ?', [photo.id]);
-    fs.rm(path.join(uploadDir, photo.filename), { force: true }, () => {});
+    fs.unlink(path.join(uploadDir, photo.filename), () => {});
     if (wasProfile) {
       const fallback = get('SELECT id FROM photos WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [req.user.id]);
       if (fallback) run('UPDATE photos SET is_profile = 1 WHERE id = ?', [fallback.id]);
@@ -1025,9 +1021,17 @@ app.use((err, req, res, next) => {
 
 app.use((req, res) => res.status(404).render('error', { message: 'Page not found.', status: 404 }));
 
-server.listen(PORT, () => {
-  console.log(`Matcha running at ${APP_URL}`);
-  console.log(sendMail.smtpReady
-    ? `Email: SMTP via ${process.env.SMTP_HOST}:${process.env.SMTP_PORT || 587}`
-    : 'Email: console mode, verification and reset links are printed here.');
+ready.then(() => {
+  migrate();
+  // Presence lives in memory, so a restart must not leave stale "online now" flags.
+  run('UPDATE users SET online = 0 WHERE online = 1');
+  server.listen(PORT, () => {
+    console.log(`Matcha running at ${APP_URL}`);
+    console.log(sendMail.smtpReady
+      ? `Email: SMTP via ${process.env.SMTP_HOST}:${process.env.SMTP_PORT || 587}`
+      : 'Email: console mode, verification and reset links are printed here.');
+  });
+}).catch((err) => {
+  console.error(err);
+  process.exit(1);
 });

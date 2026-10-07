@@ -96,7 +96,7 @@ function buildMessage({ from, to, subject, text, html }) {
     `To: ${to}`,
     `Subject: ${encodeHeader(subject)}`,
     `Date: ${new Date().toUTCString()}`,
-    `Message-ID: <${crypto.randomUUID()}@${(from.match(/@([^>\s]+)/) || [null, 'matcha.local'])[1]}>`,
+    `Message-ID: <${crypto.randomBytes(16).toString('hex')}@${(from.match(/@([^>\s]+)/) || [null, 'matcha.local'])[1]}>`,
     'MIME-Version: 1.0'
   ];
   if (!html) return `${headers.join('\r\n')}\r\n${base64Part('text/plain', text)}`;

@@ -9,19 +9,22 @@ once the like goes both ways.
 ## Stack
 
 - Node.js / Express, EJS server-rendered views
-- SQLite with handwritten SQL (`node:sqlite`, built into Node, nothing to compile)
+- SQLite with handwritten SQL: Node's built-in `node:sqlite` on Node 22.13+, and
+  `sql.js` (SQLite in WebAssembly) on older Node. Nothing is compiled on install
 - Socket.IO for live chat and notifications
 - SMTP client written on the standard library (`src/mailer.js`)
 - Self-hosted fonts and photos, the app loads nothing from third parties
 
-Requires Node.js 22.13 or newer.
+Runs on Node.js 12 or newer. On Node older than 22.13 the database lives in
+memory and is written back to the file after every change, so stop the server
+before running `npm run seed`. `npm run dev` needs Node 18+.
 
 ## Setup
 
 ```bash
 cp .env.example .env      # then fill SESSION_SECRET and the SMTP settings
 npm install
-npm run seed              # 500 horses with real photos
+npm run seed              # 500 horses with real photos, rerun to reset them
 npm start
 ```
 

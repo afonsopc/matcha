@@ -2,9 +2,7 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const bcrypt = require('bcryptjs');
-const { migrate, all, get, run, transaction } = require('./db');
-
-migrate();
+const { ready, migrate, all, get, run, transaction } = require('./db');
 
 const uploadDir = path.join(__dirname, '..', 'public', 'uploads');
 const horseDir = path.join(__dirname, '..', 'public', 'img', 'horses');
@@ -133,11 +131,11 @@ function townDeck(city) {
   return towns.get(city);
 }
 
-transaction(() => {
+function seedStable() {
   // Running the seed again replaces the seeded stable instead of piling 500
   // more horses on top. Accounts people signed up with are left alone.
   for (const file of fs.readdirSync(uploadDir).filter((f) => f.startsWith('seed-'))) {
-    fs.rmSync(path.join(uploadDir, file), { force: true });
+    fs.unlinkSync(path.join(uploadDir, file));
   }
   run("DELETE FROM users WHERE email LIKE '%@matcha.local'");
 
@@ -213,7 +211,14 @@ transaction(() => {
       (SELECT COUNT(DISTINCT reporter_id) FROM reports WHERE reported_id = users.id) * 12
     ))
   `);
-});
+}
 
-const total = get('SELECT COUNT(*) AS c FROM users').c;
-console.log(`Seed complete: ${total} horses in the stable. Sign in as trovao / Password123!`);
+ready.then(() => {
+  migrate();
+  transaction(seedStable);
+  const total = get('SELECT COUNT(*) AS c FROM users').c;
+  console.log(`Seed complete: ${total} horses in the stable. Sign in as trovao / Password123!`);
+}).catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

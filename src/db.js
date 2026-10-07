@@ -1,14 +1,5 @@
 const fs = require('fs');
 const path = require('path');
-// node:sqlite ships with Node itself, so there is no native module to compile
-// on install.
-let DatabaseSync;
-try {
-  ({ DatabaseSync } = require('node:sqlite'));
-} catch {
-  console.error(`Matcha needs Node.js 22.13 or newer (this is ${process.version}). Run: nvm install 22 && nvm use 22`);
-  process.exit(1);
-}
 
 // Relative paths in DATABASE_PATH are taken from the project root, so the app
 // finds the same database whatever folder it is started from.
@@ -16,23 +7,115 @@ const root = path.join(__dirname, '..');
 const dbPath = path.resolve(root, process.env.DATABASE_PATH || path.join('data', 'matcha.sqlite'));
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
-const db = new DatabaseSync(dbPath);
-db.exec('PRAGMA journal_mode = WAL');
-db.exec('PRAGMA foreign_keys = ON');
-
 // Great-circle distance in km, so ordering by proximity happens in SQL and the
 // "nearest 100" window is picked before any LIMIT is applied.
-db.function('distance_km', { deterministic: true }, (lat1, lon1, lat2, lon2) => {
+function distanceKm(lat1, lon1, lat2, lon2) {
   if ([lat1, lon1, lat2, lon2].some((n) => n === null || n === undefined)) return null;
   const toRad = (n) => (Number(n) * Math.PI) / 180;
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
   const a = Math.sin(dLat / 2) ** 2 + Math.sin(dLon / 2) ** 2 * Math.cos(toRad(lat1)) * Math.cos(toRad(lat2));
   return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Neither engine needs anything compiled on install. Node 22.13+ has SQLite
+// built in (node:sqlite) and it is used when present; older Node falls back to
+// sql.js, SQLite compiled to WebAssembly, which keeps the database in memory
+// and writes the whole file back after every change.
+function openBuiltin() {
+  let DatabaseSync;
+  try {
+    ({ DatabaseSync } = require('node:sqlite'));
+  } catch (err) {
+    return null;
+  }
+  const db = new DatabaseSync(dbPath);
+  // A rollback journal rather than WAL, so the file stays readable by sql.js.
+  db.exec('PRAGMA journal_mode = DELETE');
+  db.exec('PRAGMA foreign_keys = ON');
+  db.function('distance_km', { deterministic: true }, distanceKm);
+
+  // Params are either an array of positional values or an object of named ones.
+  const bind = (params) => (Array.isArray(params) ? params : [params]);
+  return {
+    exec: (sql) => db.exec(sql),
+    all: (sql, params) => db.prepare(sql).all(...bind(params)),
+    get: (sql, params) => db.prepare(sql).get(...bind(params)),
+    run: (sql, params) => db.prepare(sql).run(...bind(params)),
+    save() {}
+  };
+}
+
+async function openWasm() {
+  const SQL = await require('sql.js')();
+  const db = new SQL.Database(fs.existsSync(dbPath) ? fs.readFileSync(dbPath) : undefined);
+  // export() closes and reopens the database, dropping functions and pragmas,
+  // so this runs again after every save.
+  const setup = () => {
+    db.run('PRAGMA foreign_keys = ON');
+    db.create_function('distance_km', distanceKm);
+  };
+  setup();
+
+  // sql.js wants named params with their prefix, while the app passes bare names.
+  const bind = (params) => {
+    if (Array.isArray(params)) return params;
+    const named = {};
+    for (const key of Object.keys(params)) {
+      named[`@${key}`] = params[key];
+      named[`:${key}`] = params[key];
+      named[`$${key}`] = params[key];
+    }
+    return named;
+  };
+  const query = (sql, params) => {
+    const stmt = db.prepare(sql);
+    try {
+      stmt.bind(bind(params));
+      const rows = [];
+      while (stmt.step()) rows.push(stmt.getAsObject());
+      return rows;
+    } finally {
+      stmt.free();
+    }
+  };
+  return {
+    exec: (sql) => db.exec(sql),
+    all: query,
+    get: (sql, params) => query(sql, params)[0],
+    run(sql, params) {
+      query(sql, params);
+      return { changes: db.getRowsModified(), lastInsertRowid: query('SELECT last_insert_rowid() AS id', [])[0].id };
+    },
+    save() {
+      const data = db.export();
+      setup();
+      // Written aside then renamed, so a crash never leaves half a database.
+      fs.writeFileSync(`${dbPath}.tmp`, Buffer.from(data));
+      fs.renameSync(`${dbPath}.tmp`, dbPath);
+    }
+  };
+}
+
+let engine = null;
+let inTransaction = false;
+
+// Resolves once the database is open; nothing may query it before then.
+const ready = Promise.resolve(openBuiltin() || openWasm()).then((opened) => {
+  engine = opened;
 });
 
+const persist = () => {
+  if (!inTransaction) engine.save();
+};
+
+function exec(sql) {
+  engine.exec(sql);
+  persist();
+}
+
 function migrate() {
-  db.exec(`
+  exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       email TEXT NOT NULL UNIQUE,
@@ -139,37 +222,40 @@ function migrate() {
     CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications (user_id, read_at);
   `);
 
-  const hasLink = db.prepare("PRAGMA table_info(notifications)").all().some((c) => c.name === 'link');
-  if (!hasLink) db.exec('ALTER TABLE notifications ADD COLUMN link TEXT');
-  const hasBreed = db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'breed');
-  if (!hasBreed) db.exec('ALTER TABLE users ADD COLUMN breed TEXT');
+  const hasLink = all("PRAGMA table_info(notifications)").some((c) => c.name === 'link');
+  if (!hasLink) exec('ALTER TABLE notifications ADD COLUMN link TEXT');
+  const hasBreed = all('PRAGMA table_info(users)').some((c) => c.name === 'breed');
+  if (!hasBreed) exec('ALTER TABLE users ADD COLUMN breed TEXT');
 }
 
-// Params are either an array of positional values or an object of named ones.
-const bind = (params) => (Array.isArray(params) ? params : [params]);
-
 function all(sql, params = {}) {
-  return db.prepare(sql).all(...bind(params));
+  return engine.all(sql, params);
 }
 
 function get(sql, params = {}) {
-  return db.prepare(sql).get(...bind(params));
+  return engine.get(sql, params);
 }
 
 function run(sql, params = {}) {
-  return db.prepare(sql).run(...bind(params));
+  const info = engine.run(sql, params);
+  persist();
+  return info;
 }
 
 function transaction(fn) {
-  db.exec('BEGIN');
+  engine.exec('BEGIN');
+  inTransaction = true;
   try {
     const result = fn();
-    db.exec('COMMIT');
+    engine.exec('COMMIT');
     return result;
   } catch (err) {
-    db.exec('ROLLBACK');
+    engine.exec('ROLLBACK');
     throw err;
+  } finally {
+    inTransaction = false;
+    engine.save();
   }
 }
 
-module.exports = { db, migrate, all, get, run, transaction };
+module.exports = { ready, migrate, all, get, run, transaction };

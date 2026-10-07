@@ -57,8 +57,8 @@
       <label>Neighborhood <input name="neighborhood" value="<%= profile.neighborhood || '' %>" placeholder="Largo do Arneiro"></label>
     </div>
     <div class="row">
-      <label>Latitude <input name="latitude" type="number" step="any" value="<%= profile.location_consent ? (profile.latitude ?? '') : '' %>" placeholder="39.4036"></label>
-      <label>Longitude <input name="longitude" type="number" step="any" value="<%= profile.location_consent ? (profile.longitude ?? '') : '' %>" placeholder="-8.4862"></label>
+      <label>Latitude <input name="latitude" type="number" step="any" value="<%= profile.location_consent ? (profile.latitude == null ? '' : profile.latitude) : '' %>" placeholder="39.4036"></label>
+      <label>Longitude <input name="longitude" type="number" step="any" value="<%= profile.location_consent ? (profile.longitude == null ? '' : profile.longitude) : '' %>" placeholder="-8.4862"></label>
     </div>
     <div class="geo-row">
       <button type="button" data-geolocate><svg class="ico"><use href="#i-pin"/></svg>Use my location</button>
