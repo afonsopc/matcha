@@ -9,12 +9,12 @@ once the like goes both ways.
 ## Stack
 
 - Node.js / Express, EJS server-rendered views
-- SQLite with handwritten SQL (`better-sqlite3`)
+- SQLite with handwritten SQL (`node:sqlite`, built into Node, nothing to compile)
 - Socket.IO for live chat and notifications
 - SMTP client written on the standard library (`src/mailer.js`)
 - Self-hosted fonts and photos, the app loads nothing from third parties
 
-Requires Node.js 20 or newer.
+Requires Node.js 22.13 or newer.
 
 ## Setup
 

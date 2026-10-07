@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
-const Database = require('better-sqlite3');
+// node:sqlite ships with Node itself, so there is no native module to compile
+// on install.
+const { DatabaseSync } = require('node:sqlite');
 
 // Relative paths in DATABASE_PATH are taken from the project root, so the app
 // finds the same database whatever folder it is started from.
@@ -8,9 +10,9 @@ const root = path.join(__dirname, '..');
 const dbPath = path.resolve(root, process.env.DATABASE_PATH || path.join('data', 'matcha.sqlite'));
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
-const db = new Database(dbPath);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+const db = new DatabaseSync(dbPath);
+db.exec('PRAGMA journal_mode = WAL');
+db.exec('PRAGMA foreign_keys = ON');
 
 // Great-circle distance in km, so ordering by proximity happens in SQL and the
 // "nearest 100" window is picked before any LIMIT is applied.
@@ -137,20 +139,31 @@ function migrate() {
   if (!hasBreed) db.exec('ALTER TABLE users ADD COLUMN breed TEXT');
 }
 
+// Params are either an array of positional values or an object of named ones.
+const bind = (params) => (Array.isArray(params) ? params : [params]);
+
 function all(sql, params = {}) {
-  return db.prepare(sql).all(params);
+  return db.prepare(sql).all(...bind(params));
 }
 
 function get(sql, params = {}) {
-  return db.prepare(sql).get(params);
+  return db.prepare(sql).get(...bind(params));
 }
 
 function run(sql, params = {}) {
-  return db.prepare(sql).run(params);
+  return db.prepare(sql).run(...bind(params));
 }
 
 function transaction(fn) {
-  return db.transaction(fn)();
+  db.exec('BEGIN');
+  try {
+    const result = fn();
+    db.exec('COMMIT');
+    return result;
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
 }
 
 module.exports = { db, migrate, all, get, run, transaction };
