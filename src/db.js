@@ -2,7 +2,13 @@ const fs = require('fs');
 const path = require('path');
 // node:sqlite ships with Node itself, so there is no native module to compile
 // on install.
-const { DatabaseSync } = require('node:sqlite');
+let DatabaseSync;
+try {
+  ({ DatabaseSync } = require('node:sqlite'));
+} catch {
+  console.error(`Matcha needs Node.js 22.13 or newer (this is ${process.version}). Run: nvm install 22 && nvm use 22`);
+  process.exit(1);
+}
 
 // Relative paths in DATABASE_PATH are taken from the project root, so the app
 // finds the same database whatever folder it is started from.

@@ -134,6 +134,13 @@ function townDeck(city) {
 }
 
 transaction(() => {
+  // Running the seed again replaces the seeded stable instead of piling 500
+  // more horses on top. Accounts people signed up with are left alone.
+  for (const file of fs.readdirSync(uploadDir).filter((f) => f.startsWith('seed-'))) {
+    fs.rmSync(path.join(uploadDir, file), { force: true });
+  }
+  run("DELETE FROM users WHERE email LIKE '%@matcha.local'");
+
   for (const name of tags) run('INSERT OR IGNORE INTO tags (name) VALUES (?)', [name]);
 
   for (let i = 0; i < 500; i += 1) {
